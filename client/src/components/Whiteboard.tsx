@@ -9,7 +9,9 @@ export default function Whiteboard() {
   const [fontSize, setFontSize] = useState<number>(16);
   const [color, setColor] = useState<string>("#000000");
   const [isDark, setIsDark] = useState<boolean>(false);
-  const [selectedShapeIndex, setSelectedShapeIndex] = useState<number | null>(null);
+
+  // ✅ Use shape ID instead of index
+  const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
 
   const [pages, setPages] = useState<{ id: string; name: string; shapes: Shape[] }[]>([
     { id: crypto.randomUUID(), name: "Page 1", shapes: [] },
@@ -27,29 +29,24 @@ export default function Whiteboard() {
     );
   };
 
+  // ✅ Delete by ID
   const handleDeleteShape = () => {
-    if (selectedShapeIndex === null) return;
-    const newShapes = activePage.shapes.filter((_, idx) => idx !== selectedShapeIndex);
+    if (!selectedShapeId) return;
+    const newShapes = activePage.shapes.filter((s) => s.id !== selectedShapeId);
     updateActivePageShapes(newShapes);
-    setSelectedShapeIndex(null);
+    setSelectedShapeId(null);
   };
 
+  // ✅ Rotate by ID
   const handleRotateShape = () => {
-    if (selectedShapeIndex === null) return;
-    const newShapes = activePage.shapes.map((shape, idx) => {
-      if (idx !== selectedShapeIndex) return shape;
+    if (!selectedShapeId) return;
+    const newShapes = activePage.shapes.map((shape) => {
+      if (shape.id !== selectedShapeId) return shape;
       const prevRotation = (shape as any).rotation || 0;
       return { ...shape, rotation: prevRotation + 15 };
     });
     updateActivePageShapes(newShapes);
   };
-
-  // Smooth modern gradient background with glow for both themes
-  const boardStyle = `
-    transition: all 0.3s ease;
-    background: ${isDark ? "#0f172a" : "#f8fafc"};
-    box-shadow: 0 0 25px ${isDark ? "rgba(59,130,246,0.25)" : "rgba(30,64,175,0.15)"};
-  `;
 
   return (
     <div
@@ -87,23 +84,21 @@ export default function Whiteboard() {
           setColor(value ? "#ffffff" : "#000000");
           document.body.style.backgroundColor = value ? "#0f172a" : "#f8fafc";
         }}
-        canDelete={selectedShapeIndex !== null}
+        canDelete={selectedShapeId !== null}
         onDelete={handleDeleteShape}
-        canRotate={selectedShapeIndex !== null}
+        canRotate={selectedShapeId !== null}
         onRotate={handleRotateShape}
       />
 
       <div
         className="flex-grow relative border-t"
         style={{
-          ...{
-            background: isDark ? "#1e293b" : "#ffffff",
-            transition: "all 0.3s ease",
-            borderRadius: "0.75rem",
-            boxShadow: isDark
-              ? "0 0 30px rgba(37, 99, 235, 0.3)"
-              : "0 0 20px rgba(147, 197, 253, 0.3)",
-          },
+          background: isDark ? "#1e293b" : "#ffffff",
+          transition: "all 0.3s ease",
+          borderRadius: "0.75rem",
+          boxShadow: isDark
+            ? "0 0 30px rgba(37, 99, 235, 0.3)"
+            : "0 0 20px rgba(147, 197, 253, 0.3)",
         }}
       >
         <CanvasBoard
@@ -114,8 +109,8 @@ export default function Whiteboard() {
           shapes={activePage.shapes}
           onShapesChange={updateActivePageShapes}
           isDark={isDark}
-          selectedShapeIndex={selectedShapeIndex}
-          onSelectShape={setSelectedShapeIndex}
+          selectedShapeId={selectedShapeId} // ✅ updated prop
+          onSelectShape={setSelectedShapeId} // ✅ updated prop
         />
       </div>
     </div>

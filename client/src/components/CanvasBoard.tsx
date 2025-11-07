@@ -9,11 +9,10 @@ interface CanvasBoardProps {
   shapes: Shape[];
   onShapesChange: (shapes: Shape[]) => void;
   isDark: boolean;
-
-  // optional props — added to match usage sites that passed them
-  selectedShapeIndex?: number | null;
-  onSelectShape?: (id: string | null) => void;
+  selectedShapeId: string | null;
+  onSelectShape: (id: string | null) => void;
 }
+
 
 export default function CanvasBoard({
   selectedTool,

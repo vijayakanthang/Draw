@@ -49,10 +49,6 @@ export default function Toolbar({
   onSelectPage,
   isDark,
   onToggleDark,
-  canDelete,
-  onDelete,
-  canRotate,
-  onRotate,
 }: ToolbarProps) {
   const fonts = ["Arial", "Roboto", "Courier New", "Times New Roman", "Verdana"];
 
