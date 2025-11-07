@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from "react";
-import { Shape, Tool, Point } from "../types/shapes";
+import type { Shape, Tool, Point } from "../types/shapes";
 
 interface CanvasBoardProps {
   selectedTool: Tool;
@@ -9,6 +9,10 @@ interface CanvasBoardProps {
   shapes: Shape[];
   onShapesChange: (shapes: Shape[]) => void;
   isDark: boolean;
+
+  // optional props — added to match usage sites that passed them
+  selectedShapeIndex?: number | null;
+  onSelectShape?: (id: string | null) => void;
 }
 
 export default function CanvasBoard({
@@ -19,6 +23,7 @@ export default function CanvasBoard({
   shapes,
   onShapesChange,
   isDark,
+  onSelectShape,
 }: CanvasBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [currentShape, setCurrentShape] = useState<Shape | null>(null);
@@ -30,7 +35,10 @@ export default function CanvasBoard({
     y: number;
     value: string;
   } | null>(null);
-  const [canvasSize, setCanvasSize] = useState<{ w: number; h: number }>({ w: window.innerWidth, h: window.innerHeight - 80 });
+  const [canvasSize, setCanvasSize] = useState<{ w: number; h: number }>({
+    w: window.innerWidth,
+    h: window.innerHeight - 80,
+  });
   const [interaction, setInteraction] = useState<
     | { type: "none" }
     | { type: "move"; id: string; startPos: Point }
@@ -39,9 +47,12 @@ export default function CanvasBoard({
   >({ type: "none" });
 
   const getMousePos = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const rect = canvasRef.current!.getBoundingClientRect();
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return { x: e.clientX, y: e.clientY };
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   };
+
+  const safePoint = (p?: Point): Point => p ?? { x: 0, y: 0 };
 
   const drawAllShapes = (ctx: CanvasRenderingContext2D) => {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -57,7 +68,7 @@ export default function CanvasBoard({
 
     switch (shape.type) {
       case "pencil":
-        if (shape.path) {
+        if (shape.path && shape.path.length > 0) {
           ctx.strokeStyle = shape.color || "#fff";
           ctx.beginPath();
           shape.path.forEach((p, i) => {
@@ -68,31 +79,36 @@ export default function CanvasBoard({
         }
         break;
 
-      case "line":
+      case "line": {
+        const start = safePoint(shape.start);
+        const end = safePoint(shape.end);
         ctx.strokeStyle = shape.color || "#fff";
         ctx.beginPath();
-        ctx.moveTo(shape.start.x, shape.start.y);
-        ctx.lineTo(shape.end.x, shape.end.y);
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(end.x, end.y);
         ctx.stroke();
         break;
+      }
 
-      case "circle":
+      case "circle": {
+        const start = safePoint(shape.start);
+        const end = safePoint(shape.end);
         ctx.strokeStyle = shape.color || "#fff";
-        const radius = Math.hypot(
-          shape.end.x - shape.start.x,
-          shape.end.y - shape.start.y
-        );
+        const radius = Math.hypot(end.x - start.x, end.y - start.y);
         ctx.beginPath();
-        ctx.arc(shape.start.x, shape.start.y, radius, 0, 2 * Math.PI);
+        ctx.arc(start.x, start.y, radius, 0, 2 * Math.PI);
         ctx.stroke();
         break;
+      }
 
       case "rectangle": {
+        const start = safePoint(shape.start);
+        const end = safePoint(shape.end);
         ctx.strokeStyle = shape.color || "#fff";
-        const x = Math.min(shape.start.x, shape.end.x);
-        const y = Math.min(shape.start.y, shape.end.y);
-        const w = Math.abs(shape.end.x - shape.start.x);
-        const h = Math.abs(shape.end.y - shape.start.y);
+        const x = Math.min(start.x, end.x);
+        const y = Math.min(start.y, end.y);
+        const w = Math.abs(end.x - start.x);
+        const h = Math.abs(end.y - start.y);
         const angle = ((shape.rotation || 0) * Math.PI) / 180;
         if (angle) {
           ctx.save();
@@ -106,52 +122,59 @@ export default function CanvasBoard({
         break;
       }
 
-      case "arrow":
+      case "arrow": {
+        const start = safePoint(shape.start);
+        const end = safePoint(shape.end);
         ctx.strokeStyle = shape.color || "#fff";
-        const { start, end } = shape;
         const dx = end.x - start.x;
         const dy = end.y - start.y;
-        const angle = Math.atan2(dy, dx);
+        const ang = Math.atan2(dy, dx);
         const headlen = 10;
         ctx.beginPath();
         ctx.moveTo(start.x, start.y);
         ctx.lineTo(end.x, end.y);
         ctx.lineTo(
-          end.x - headlen * Math.cos(angle - Math.PI / 6),
-          end.y - headlen * Math.sin(angle - Math.PI / 6)
+          end.x - headlen * Math.cos(ang - Math.PI / 6),
+          end.y - headlen * Math.sin(ang - Math.PI / 6)
         );
         ctx.moveTo(end.x, end.y);
         ctx.lineTo(
-          end.x - headlen * Math.cos(angle + Math.PI / 6),
-          end.y - headlen * Math.sin(angle + Math.PI / 6)
+          end.x - headlen * Math.cos(ang + Math.PI / 6),
+          end.y - headlen * Math.sin(ang + Math.PI / 6)
         );
         ctx.stroke();
         break;
+      }
 
-      case "text":
-        if (shape.text && shape.x && shape.y) {
+      case "text": {
+        if (shape.text != null) {
+          const x = shape.x ?? 0;
+          const y = shape.y ?? 0;
           ctx.fillStyle = shape.color || "#000";
           ctx.font = `${shape.fontSize || 16}px ${shape.fontFamily || "Arial"}`;
-          const angle = ((shape.rotation || 0) * Math.PI) / 180;
-          if (angle) {
+          const ang = ((shape.rotation || 0) * Math.PI) / 180;
+          if (ang) {
             ctx.save();
-            ctx.translate(shape.x, shape.y);
-            ctx.rotate(angle);
+            ctx.translate(x, y);
+            ctx.rotate(ang);
             ctx.fillText(shape.text, 0, 0);
             ctx.restore();
           } else {
-            ctx.fillText(shape.text, shape.x, shape.y);
+            ctx.fillText(shape.text, x, y);
           }
         }
         break;
+      }
     }
   };
 
   const getRectBounds = (shape: Shape) => {
-    const x = Math.min(shape.start.x, shape.end.x);
-    const y = Math.min(shape.start.y, shape.end.y);
-    const w = Math.abs(shape.end.x - shape.start.x);
-    const h = Math.abs(shape.end.y - shape.start.y);
+    const start = safePoint(shape.start);
+    const end = safePoint(shape.end);
+    const x = Math.min(start.x, end.x);
+    const y = Math.min(start.y, end.y);
+    const w = Math.abs(end.x - start.x);
+    const h = Math.abs(end.y - start.y);
     return { x, y, w, h, cx: x + w / 2, cy: y + h / 2 };
   };
 
@@ -162,7 +185,7 @@ export default function CanvasBoard({
     ctx.lineWidth = 1;
     const handleSize = 6;
     if (shape.type === "rectangle") {
-      const { x, y, w, h, cx, cy } = getRectBounds(shape);
+      const { x, y, w, h } = getRectBounds(shape);
       // bounding box (not rotated for simplicity)
       ctx.setLineDash([5, 3]);
       ctx.strokeRect(x, y, w, h);
@@ -180,9 +203,8 @@ export default function CanvasBoard({
       ctx.lineTo(rx, ry);
       ctx.stroke();
     } else if (shape.type === "line" || shape.type === "arrow") {
-      // end handles
-      const a = shape.start;
-      const b = shape.end;
+      const a = safePoint(shape.start);
+      const b = safePoint(shape.end);
       ctx.setLineDash([5, 3]);
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
@@ -192,19 +214,21 @@ export default function CanvasBoard({
       ctx.fillRect(a.x - handleSize / 2, a.y - handleSize / 2, handleSize, handleSize);
       ctx.fillRect(b.x - handleSize / 2, b.y - handleSize / 2, handleSize, handleSize);
     } else if (shape.type === "circle") {
-      const r = Math.hypot(shape.end.x - shape.start.x, shape.end.y - shape.start.y);
+      const start = safePoint(shape.start);
+      const end = safePoint(shape.end);
+      const r = Math.hypot(end.x - start.x, end.y - start.y);
       ctx.setLineDash([5, 3]);
       ctx.beginPath();
-      ctx.arc(shape.start.x, shape.start.y, r, 0, 2 * Math.PI);
+      ctx.arc(start.x, start.y, r, 0, 2 * Math.PI);
       ctx.stroke();
       ctx.setLineDash([]);
       // radius handle at end point
-      ctx.fillRect(shape.end.x - handleSize / 2, shape.end.y - handleSize / 2, handleSize, handleSize);
+      ctx.fillRect(end.x - handleSize / 2, end.y - handleSize / 2, handleSize, handleSize);
     } else if (shape.type === "text") {
       const width = (shape.fontSize || 16) * (shape.text ? shape.text.length * 0.6 : 4);
-      const height = (shape.fontSize || 16);
-      const x = (shape.x || 0);
-      const y = (shape.y || 0) - height;
+      const height = shape.fontSize || 16;
+      const x = shape.x ?? 0;
+      const y = (shape.y ?? 0) - height;
       ctx.setLineDash([5, 3]);
       ctx.strokeRect(x, y, width, height);
       ctx.setLineDash([]);
@@ -222,9 +246,11 @@ export default function CanvasBoard({
     ctx.restore();
   };
 
-  const hitTest = (p: Point): { id: string; handle?: "br" | "endA" | "endB" | "rotate" } | null => {
+  const hitTest = (
+    p: Point
+  ): { id: string; handle?: "br" | "endA" | "endB" | "rotate" } | null => {
     const handleSize = 8;
-    // Prioritize handles
+    // Prioritize handles for currently selected shape
     const shape = shapes.find((s) => s.id === selectedId);
     if (shape) {
       if (shape.type === "rectangle") {
@@ -239,33 +265,41 @@ export default function CanvasBoard({
         if (Math.hypot(p.x - rx, p.y - ry) <= 8) return { id: shape.id, handle: "rotate" as any };
       }
       if (shape.type === "line" || shape.type === "arrow") {
-        if (Math.abs(p.x - shape.start.x) <= handleSize && Math.abs(p.y - shape.start.y) <= handleSize) return { id: shape.id, handle: "endA" };
-        if (Math.abs(p.x - shape.end.x) <= handleSize && Math.abs(p.y - shape.end.y) <= handleSize) return { id: shape.id, handle: "endB" };
+        const s = safePoint(shape.start);
+        const e = safePoint(shape.end);
+        if (Math.abs(p.x - s.x) <= handleSize && Math.abs(p.y - s.y) <= handleSize) return { id: shape.id, handle: "endA" };
+        if (Math.abs(p.x - e.x) <= handleSize && Math.abs(p.y - e.y) <= handleSize) return { id: shape.id, handle: "endB" };
       }
       if (shape.type === "circle") {
-        if (Math.abs(p.x - shape.end.x) <= handleSize && Math.abs(p.y - shape.end.y) <= handleSize) return { id: shape.id, handle: "endB" };
+        const e = safePoint(shape.end);
+        if (Math.abs(p.x - e.x) <= handleSize && Math.abs(p.y - e.y) <= handleSize) return { id: shape.id, handle: "endB" };
       }
       if (shape.type === "text") {
         const width = (shape.fontSize || 16) * (shape.text ? shape.text.length * 0.6 : 4);
-        const height = (shape.fontSize || 16);
-        const x = (shape.x || 0);
-        const y = (shape.y || 0) - height;
+        const height = shape.fontSize || 16;
+        const x = shape.x ?? 0;
+        const y = (shape.y ?? 0) - height;
         const rx = x + width / 2;
         const ry = y - 20;
         if (Math.hypot(p.x - rx, p.y - ry) <= 8) return { id: shape.id, handle: "rotate" as any };
       }
     }
-    // Shape body
+
+    // Shape body (iterate top-down)
     for (let i = shapes.length - 1; i >= 0; i--) {
       const s = shapes[i];
       if (s.type === "rectangle") {
         const { x, y, w, h } = getRectBounds(s);
         if (p.x >= x && p.x <= x + w && p.y >= y && p.y <= y + h) return { id: s.id };
       } else if (s.type === "circle") {
-        const r = Math.hypot(s.end.x - s.start.x, s.end.y - s.start.y);
-        if (Math.hypot(p.x - s.start.x, p.y - s.start.y) <= r) return { id: s.id };
+        const start = safePoint(s.start);
+        const end = safePoint(s.end);
+        const r = Math.hypot(end.x - start.x, end.y - start.y);
+        if (Math.hypot(p.x - start.x, p.y - start.y) <= r) return { id: s.id };
       } else if (s.type === "line" || s.type === "arrow") {
-        const dist = pointToSegmentDistance(p, s.start, s.end);
+        const start = safePoint(s.start);
+        const end = safePoint(s.end);
+        const dist = pointToSegmentDistance(p, start, end);
         if (dist <= 6) return { id: s.id };
       } else if (s.type === "pencil") {
         const path = s.path || [];
@@ -274,15 +308,14 @@ export default function CanvasBoard({
         }
       } else if (s.type === "text") {
         const width = (s.fontSize || 16) * (s.text ? s.text.length * 0.6 : 4);
-        const height = (s.fontSize || 16);
-        const x = (s.x || 0);
-        const y = (s.y || 0) - height;
+        const height = s.fontSize || 16;
+        const x = s.x ?? 0;
+        const y = (s.y ?? 0) - height;
         if (p.x >= x && p.x <= x + width && p.y >= y && p.y <= y + height) return { id: s.id };
       }
     }
     return null;
   };
-
 
   const pointToSegmentDistance = (p: Point, a: Point, b: Point) => {
     const vx = b.x - a.x;
@@ -311,20 +344,18 @@ export default function CanvasBoard({
   }, [shapes, isDark]);
 
   useEffect(() => {
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
-      const updatedShapes = shapes.filter((s) => s.id !== selectedId);
-      onShapesChange(updatedShapes);
-      setSelectedId(null);
-    }
-  };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
+        const updatedShapes = shapes.filter((s) => s.id !== selectedId);
+        onShapesChange(updatedShapes);
+        setSelectedId(null);
+        onSelectShape?.(null);
+      }
+    };
 
-  window.addEventListener("keydown", handleKeyDown);
-  return () => window.removeEventListener("keydown", handleKeyDown);
-}, [selectedId, shapes, onShapesChange]);
-
-
-
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedId, shapes, onShapesChange, onSelectShape]);
 
   useEffect(() => {
     if (textEdit && inputRef.current) {
@@ -338,6 +369,12 @@ export default function CanvasBoard({
       const toolbar = document.getElementById("toolbar");
       const th = toolbar ? toolbar.getBoundingClientRect().height : 64;
       setCanvasSize({ w: window.innerWidth, h: Math.max(200, window.innerHeight - th) });
+      // ensure canvas element size is updated on DOM
+      const c = canvasRef.current;
+      if (c) {
+        c.width = Math.max(200, window.innerWidth);
+        c.height = Math.max(200, Math.max(200, window.innerHeight - th));
+      }
     };
     const onResize = () => measure();
     window.addEventListener("resize", onResize);
@@ -357,6 +394,7 @@ export default function CanvasBoard({
     const hit = hitTest(pos);
     if (hit) {
       setSelectedId(hit.id);
+      onSelectShape?.(hit.id);
       const s = shapes.find((sh) => sh.id === hit.id)!;
       if (hit.handle === "br") {
         setInteraction({ type: "resize", id: s.id, handle: "br", startPos: pos });
@@ -378,7 +416,7 @@ export default function CanvasBoard({
           center = { x: b.cx, y: b.cy };
         } else if (s.type === "text") {
           const width = (s.fontSize || 16) * (s.text ? s.text.length * 0.6 : 4);
-          const height = (s.fontSize || 16);
+          const height = s.fontSize || 16;
           center = { x: (s.x || 0) + width / 2, y: (s.y || 0) - height / 2 };
         }
         setInteraction({ type: "rotate", id: s.id, center });
@@ -433,10 +471,12 @@ export default function CanvasBoard({
         const s = shapes[sIdx];
         let updated: Shape = { ...s };
         if (s.type === "rectangle" || s.type === "circle" || s.type === "line" || s.type === "arrow") {
+          const start = safePoint(s.start);
+          const end = safePoint(s.end);
           updated = {
             ...s,
-            start: { x: s.start.x + dx, y: s.start.y + dy },
-            end: { x: s.end.x + dx, y: s.end.y + dy },
+            start: { x: start.x + dx, y: start.y + dy },
+            end: { x: end.x + dx, y: end.y + dy },
           };
         } else if (s.type === "pencil") {
           updated = {
@@ -487,11 +527,12 @@ export default function CanvasBoard({
     }
 
     if (!currentShape) return;
-    const canvas = canvasRef.current!;
-    const ctx = canvas.getContext("2d")!;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const updated = { ...currentShape, end: pos };
+    const updated: Shape = { ...currentShape, end: pos };
     if (selectedTool === "pencil") {
       updated.path = [...(currentShape.path || []), pos];
     }
@@ -518,7 +559,7 @@ export default function CanvasBoard({
       const idx = shapes.findIndex((s) => s.id === hit.id);
       if (idx >= 0 && shapes[idx].type === "text") {
         const current = shapes[idx];
-        setTextEdit({ id: current.id, x: current.x || pos.x, y: current.y || pos.y, value: current.text || "" });
+        setTextEdit({ id: current.id, x: current.x ?? pos.x, y: current.y ?? pos.y, value: current.text ?? "" });
       }
     }
   };
@@ -556,8 +597,9 @@ export default function CanvasBoard({
         ref={canvasRef}
         width={canvasSize.w}
         height={canvasSize.h}
-        className={`border-0 rounded-none cursor-crosshair w-screen transition-colors duration-300 ${isDark ? "bg-[#000000]" : "bg-white"
-          }`}
+        className={`border-0 rounded-none cursor-crosshair w-screen transition-colors duration-300 ${
+          isDark ? "bg-[#000000]" : "bg-white"
+        }`}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -582,7 +624,6 @@ export default function CanvasBoard({
             fontSize,
             background: isDark ? "rgba(0, 0, 0, 1)" : "rgba(255,255,255,0.9)",
             color: isDark ? "#ffffff" : color || "#000000",
-
             outline: "none",
             border: "1px solid rgba(203,213,225,1)",
             padding: "2px 4px",
@@ -594,5 +635,3 @@ export default function CanvasBoard({
     </div>
   );
 }
-
-
