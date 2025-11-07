@@ -1,5 +1,3 @@
-import React from "react";
-
 interface PageNavProps {
   pages: { id: string; name: string }[];
   activePageId: string;
