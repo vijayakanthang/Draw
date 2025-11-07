@@ -310,6 +310,19 @@ export default function CanvasBoard({
     }
   }, [shapes, isDark]);
 
+  useEffect(() => {
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
+      const updatedShapes = shapes.filter((s) => s.id !== selectedId);
+      onShapesChange(updatedShapes);
+      setSelectedId(null);
+    }
+  };
+
+  window.addEventListener("keydown", handleKeyDown);
+  return () => window.removeEventListener("keydown", handleKeyDown);
+}, [selectedId, shapes, onShapesChange]);
+
 
 
 

@@ -16,10 +16,15 @@ export default function Whiteboard() {
   ]);
   const [activePageId, setActivePageId] = useState<string>(pages[0].id);
 
-  const activePage = useMemo(() => pages.find((p) => p.id === activePageId)!, [pages, activePageId]);
+  const activePage = useMemo(
+    () => pages.find((p) => p.id === activePageId)!,
+    [pages, activePageId]
+  );
 
   const updateActivePageShapes = (shapes: Shape[]) => {
-    setPages((prev) => prev.map((p) => (p.id === activePageId ? { ...p, shapes } : p)));
+    setPages((prev) =>
+      prev.map((p) => (p.id === activePageId ? { ...p, shapes } : p))
+    );
   };
 
   const handleDeleteShape = () => {
@@ -33,15 +38,24 @@ export default function Whiteboard() {
     if (selectedShapeIndex === null) return;
     const newShapes = activePage.shapes.map((shape, idx) => {
       if (idx !== selectedShapeIndex) return shape;
-      // Add or update a 'rotation' property (degrees)
       const prevRotation = (shape as any).rotation || 0;
       return { ...shape, rotation: prevRotation + 15 };
     });
     updateActivePageShapes(newShapes);
   };
 
+  // Smooth modern gradient background with glow for both themes
+  const boardStyle = `
+    transition: all 0.3s ease;
+    background: ${isDark ? "#0f172a" : "#f8fafc"};
+    box-shadow: 0 0 25px ${isDark ? "rgba(59,130,246,0.25)" : "rgba(30,64,175,0.15)"};
+  `;
+
   return (
-    <div className="flex flex-col  p-0 bg-white h-full w-full">
+    <div
+      className="flex flex-col p-0 h-full w-full"
+      style={{ backgroundColor: isDark ? "#0f172a" : "#ffffff" }}
+    >
       <Toolbar
         selectedTool={selectedTool}
         onSelectTool={setSelectedTool}
@@ -55,15 +69,21 @@ export default function Whiteboard() {
         activePageId={activePageId}
         onCreatePage={() => {
           const id = crypto.randomUUID();
-          setPages((prev) => [...prev, { id, name: `Page ${prev.length + 1}`, shapes: [] }]);
+          setPages((prev) => [
+            ...prev,
+            { id, name: `Page ${prev.length + 1}`, shapes: [] },
+          ]);
           setActivePageId(id);
         }}
-        onRenamePage={(id: string, name: string) => setPages((prev) => prev.map((p) => (p.id === id ? { ...p, name } : p)))}
+        onRenamePage={(id: string, name: string) =>
+          setPages((prev) =>
+            prev.map((p) => (p.id === id ? { ...p, name } : p))
+          )
+        }
         onSelectPage={(id: string) => setActivePageId(id)}
         isDark={isDark}
         onToggleDark={(value: boolean) => {
           setIsDark(value);
-          // set default drawing color depending on theme
           setColor(value ? "#ffffff" : "#000000");
           document.body.style.backgroundColor = value ? "#0f172a" : "#f8fafc";
         }}
@@ -73,17 +93,31 @@ export default function Whiteboard() {
         onRotate={handleRotateShape}
       />
 
-      <CanvasBoard
-        selectedTool={selectedTool}
-        fontFamily={fontFamily}
-        fontSize={fontSize}
-        color={color}
-        shapes={activePage.shapes}
-        onShapesChange={updateActivePageShapes}
-        isDark={isDark}
-        selectedShapeIndex={selectedShapeIndex}
-        onSelectShape={setSelectedShapeIndex}
-      />
+      <div
+        className="flex-grow relative border-t"
+        style={{
+          ...{
+            background: isDark ? "#1e293b" : "#ffffff",
+            transition: "all 0.3s ease",
+            borderRadius: "0.75rem",
+            boxShadow: isDark
+              ? "0 0 30px rgba(37, 99, 235, 0.3)"
+              : "0 0 20px rgba(147, 197, 253, 0.3)",
+          },
+        }}
+      >
+        <CanvasBoard
+          selectedTool={selectedTool}
+          fontFamily={fontFamily}
+          fontSize={fontSize}
+          color={color}
+          shapes={activePage.shapes}
+          onShapesChange={updateActivePageShapes}
+          isDark={isDark}
+          selectedShapeIndex={selectedShapeIndex}
+          onSelectShape={setSelectedShapeIndex}
+        />
+      </div>
     </div>
   );
 }
