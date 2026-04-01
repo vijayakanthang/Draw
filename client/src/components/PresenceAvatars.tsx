@@ -1,4 +1,3 @@
-import React from "react";
 
 interface UserPresence {
   id: string;
@@ -16,7 +15,7 @@ export default function PresenceAvatars({ users, currentPageId }: PresenceAvatar
 
   return (
     <div className="fixed top-6 right-6 z-50 flex items-center -space-x-2">
-      {userList.map((user, i) => (
+      {userList.map((user) => (
         <div 
           key={user.id}
           className={`relative group flex items-center justify-center w-9 h-9 rounded-full border-2 border-slate-900 bg-gradient-to-br from-blue-500 to-blue-700 text-white text-[10px] font-bold shadow-xl transition-all hover:scale-110 hover:z-10 cursor-help ${user.pageId === currentPageId ? "ring-2 ring-green-400 ring-offset-2 ring-offset-slate-900" : "opacity-40"}`}
