@@ -1,208 +1,127 @@
 import type { Tool } from "../types/shapes";
+import { 
+  CursorIcon, PencilIcon, LineIcon, RectIcon, CircleIcon, 
+  TextIcon, StickyIcon, TrashIcon, UndoIcon, RedoIcon, 
+  ImageIcon, PaintIcon, SunIcon, MoonIcon, PencilLineIcon,
+  PresentationIcon, LibraryIcon, ShareIcon, SparklesIcon, GridIcon,
+  MessageCircleIcon, WandIcon, FlameIcon, TimerIcon
+} from "./Icons";
 
 interface ToolbarProps {
   selectedTool: Tool;
   onSelectTool: (tool: Tool) => void;
-  fontFamily: string;
-  setFontFamily: (font: string) => void;
-  fontSize: number;
-  setFontSize: (size: number) => void;
   color: string;
   setColor: (color: string) => void;
   pages: { id: string; name: string }[];
   activePageId: string;
   onCreatePage: () => void;
-  onRenamePage: (id: string, name: string) => void;
   onSelectPage: (id: string) => void;
   isDark: boolean;
   onToggleDark: (value: boolean) => void;
+  handDrawn: boolean;
+  onToggleHandDrawn: (value: boolean) => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
   canDelete: boolean;
   onDelete: () => void;
-  canRotate: boolean;
-  onRotate: () => void;
+  onExportPNG: () => void;
+  onExportSVG: () => void;
+  isPresenting: boolean;
+  onTogglePresentation: () => void;
+  showLibrary: boolean;
+  onToggleLibrary: () => void;
+  onShare: () => void;
+  onOpenAI: () => void;
+  onAutoLayout: () => void;
+  magicMode: boolean;
+  onToggleMagic: () => void;
+  heatmapMode: boolean;
+  onToggleHeatmap: () => void;
+  showTimeline: boolean;
+  onToggleTimeline: () => void;
 }
 
-const tools: Tool[] = ["pencil", "line", "circle", "arrow", "rectangle"];
-const toolIcon: Record<Tool, string> = {
-  pencil: "✏️",
-  line: "／",
-  circle: "◯",
-  arrow: "➤",
-  rectangle: "▭",
-  text: "T",
-  none: "",
-};
+const mainTools: { id: Tool; icon: React.ReactNode; label: string }[] = [
+  { id: "select", icon: <CursorIcon />, label: "Select (V)" },
+  { id: "pencil", icon: <PencilIcon />, label: "Pencil (P)" },
+  { id: "line", icon: <LineIcon />, label: "Line (L)" },
+  { id: "rectangle", icon: <RectIcon />, label: "Rect (R)" },
+  { id: "circle", icon: <CircleIcon />, label: "Circle (O)" },
+  { id: "text", icon: <TextIcon />, label: "Text (T)" },
+  { id: "sticky", icon: <StickyIcon />, label: "Sticky (S)" },
+  { id: "comment" as Tool, icon: <MessageCircleIcon />, label: "Comment (C)" },
+];
 
-export default function Toolbar({
-  selectedTool,
-  onSelectTool,
-  fontFamily,
-  setFontFamily,
-  fontSize,
-  setFontSize,
-  color,
-  setColor,
-  pages,
-  activePageId,
-  onCreatePage,
-  onRenamePage,
-  onSelectPage,
-  isDark,
-  onToggleDark,
-}: ToolbarProps) {
-  const fonts = ["Arial", "Roboto", "Courier New", "Times New Roman", "Verdana"];
+export default function Toolbar(props: ToolbarProps) {
+  const { isPresenting } = props;
 
   return (
-    <div
-      id="toolbar"
-      className={`flex flex-wrap gap-2 p-2 rounded-none border-b items-center sticky top-0 z-10 w-full transition-all duration-300 backdrop-blur-md ${
-        isDark
-          ? "bg-[#111827]/80 text-[#EDEDED] border-[#1f2937]"
-          : "bg-[#FFFFFF]/80 text-[#111111] border-[#E5E7EB]"
-      }`}
-      style={{
-        boxShadow: isDark
-          ? "0 0 25px rgba(59,130,246,0.25)"
-          : "0 0 15px rgba(59,130,246,0.15)",
-      }}
-    >
-      {/* ➕ Page Controls */}
-      <button
-        onClick={onCreatePage}
-        className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white px-3 py-1 rounded-md font-semibold shadow-md transition"
-        title="Create new page"
-      >
-        +
-      </button>
-
-      <input
-        className={`px-3 py-1 rounded-md border text-sm shadow-sm w-40 sm:w-56 transition-colors duration-300 ${
-          isDark
-            ? "bg-[#1E293B] text-[#EDEDED] border-[#334155]"
-            : "bg-[#F9FAFB] text-[#111111] border-[#E5E7EB]"
-        }`}
-        value={pages.find((p) => p.id === activePageId)?.name || "Untitled"}
-        onChange={(e) => onRenamePage(activePageId, e.target.value)}
-      />
-
-      {/* ✏️ Drawing Tools */}
-      <div className="flex gap-1">
-        {tools.map((tool) => (
-          <button
-            key={tool}
-            onClick={() => onSelectTool(tool)}
-            className={`px-3 py-1 rounded-md text-sm font-medium transition-colors shadow-sm ${
-              selectedTool === tool
-                ? "bg-blue-600 text-white"
-                : isDark
-                ? "bg-[#1E293B] hover:bg-[#334155] text-[#EDEDED]"
-                : "bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#111111]"
-            }`}
-          >
-            {toolIcon[tool]}
-          </button>
-        ))}
-      </div>
-
-      {/* 🔤 Text Controls */}
-      <div className="flex gap-2 items-center">
-        <button
-          onClick={() => onSelectTool("text")}
-          className={`px-3 py-1 rounded-md text-sm font-medium transition-colors shadow-sm ${
-            selectedTool === "text"
-              ? "bg-blue-600 text-white"
-              : isDark
-              ? "bg-[#1E293B] hover:bg-[#334155] text-[#EDEDED]"
-              : "bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#111111]"
-          }`}
-        >
-          T
-        </button>
-
-        <select
-          value={fontFamily}
-          onChange={(e) => setFontFamily(e.target.value)}
-          className={`px-2 py-1 rounded-md border text-sm transition-colors shadow-sm ${
-            isDark
-              ? "bg-[#1E293B] text-[#EDEDED] border-[#334155]"
-              : "bg-[#FFFFFF] text-[#111111] border-[#E5E7EB]"
-          }`}
-        >
-          {fonts.map((font) => (
-            <option key={font} value={font} style={{ fontFamily: font }}>
-              {font}
-            </option>
+    <>
+      {/* 1. Main Tools & AI (Top Center) */}
+      <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 p-1.5 bg-white/10 dark:bg-black/40 backdrop-blur-3xl border border-white/20 dark:border-white/5 rounded-2xl shadow-3xl transition-all duration-500 ${isPresenting ? "-translate-y-20 opacity-0" : "translate-y-0 opacity-100"}`}>
+        <div className="flex items-center gap-1 border-r border-white/10 pr-1">
+          {mainTools.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => props.onSelectTool(t.id)}
+              title={t.label}
+              className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${
+                props.selectedTool === t.id ? "bg-blue-600 text-white shadow-lg" : "hover:bg-white/10 text-white/60 hover:text-white"
+              }`}
+            >
+              {t.icon}
+            </button>
           ))}
+        </div>
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={props.onOpenAI} title="AI Text-Link" className="w-10 h-10 flex items-center justify-center rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-all hover:scale-105"><SparklesIcon /></button>
+          <button onClick={props.onAutoLayout} title="Auto-Layout" className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white/10 text-white/60"><GridIcon /></button>
+          <button onClick={props.onToggleMagic} title="AI Magic" className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${props.magicMode ? "bg-purple-500/20 text-purple-400 border border-purple-500/30" : "hover:bg-white/10 text-white/60"}`}><WandIcon /></button>
+          <button onClick={props.onToggleHeatmap} title="Heatmap" className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${props.heatmapMode ? "bg-red-500/20 text-red-500 animate-pulse" : "hover:bg-white/10 text-white/60"}`}><FlameIcon /></button>
+        </div>
+      </div>
+
+      {/* 2. Top Right Actions (Export & Share) */}
+      <div className={`fixed top-6 right-6 z-50 flex items-center gap-2 p-1.5 bg-white/10 dark:bg-black/40 backdrop-blur-3xl border border-white/20 dark:border-white/5 rounded-2xl transition-all duration-500 ${isPresenting ? "-translate-y-20 opacity-0" : "translate-y-0 opacity-100"}`}>
+        <button onClick={props.onExportPNG} title="Export PNG" className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white/10 text-white/60"><ImageIcon /></button>
+        <button onClick={props.onExportSVG} title="Export SVG" className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white/10 text-white/60"><PaintIcon /></button>
+        <div className="w-[1px] h-6 bg-white/10 mx-1" />
+        <button onClick={props.onShare} title="Share Board" className="px-4 h-10 flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-lg active:scale-95"><ShareIcon /> Share</button>
+      </div>
+
+      {/* 3. Page Navigator (Bottom Left) */}
+      <div className={`fixed bottom-6 left-6 z-50 flex items-center gap-2 p-1.5 bg-white/10 dark:bg-black/40 backdrop-blur-3xl border border-white/20 dark:border-white/5 rounded-2xl transition-all duration-500 ${isPresenting ? "translate-y-20 opacity-0" : "translate-y-0 opacity-100"}`}>
+        <select value={props.activePageId} onChange={(e) => props.onSelectPage(e.target.value)} className="bg-transparent text-sm font-bold text-white/70 outline-none border-none py-1 px-2 cursor-pointer hover:text-white">
+          {props.pages.map(p => <option key={p.id} value={p.id} className="bg-slate-900 text-white">{p.name}</option>)}
         </select>
-
-        <input
-          type="number"
-          value={fontSize}
-          onChange={(e) => setFontSize(parseInt(e.target.value) || 16)}
-          min={8}
-          max={72}
-          className={`w-16 px-2 py-1 rounded-md border text-sm shadow-sm ${
-            isDark
-              ? "bg-[#1E293B] text-[#EDEDED] border-[#334155]"
-              : "bg-[#FFFFFF] text-[#111111] border-[#E5E7EB]"
-          }`}
-        />
+        <button onClick={props.onCreatePage} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold transition-all hover:scale-110">+</button>
       </div>
 
-      {/* 🎨 Color Picker */}
-      <div className="flex items-center gap-2">
-        <span
-          className="w-5 h-5 rounded-full border"
-          style={{
-            backgroundColor: color,
-            borderColor: isDark ? "#334155" : "#E5E7EB",
-          }}
-        />
-        <input
-          type="color"
-          value={color}
-          onChange={(e) => setColor(e.target.value)}
-          className="w-8 h-8 border rounded-md cursor-pointer shadow-sm"
-          style={{
-            borderColor: isDark ? "#334155" : "#E5E7EB",
-          }}
-        />
+      {/* 4. Action Menu & Settings (Bottom Center) */}
+      <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 p-1.5 bg-white/10 dark:bg-black/40 backdrop-blur-3xl border border-white/20 dark:border-white/5 rounded-2xl shadow-3xl transition-all duration-500 ${isPresenting ? "translate-y-20 opacity-0" : "translate-y-0 opacity-100"}`}>
+        <div className="flex items-center gap-1 border-r border-white/10 pr-1">
+          <button onClick={props.onUndo} disabled={!props.canUndo} className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${props.canUndo ? "text-white/60 hover:text-white hover:bg-white/10" : "opacity-20 pointer-events-none"}`}><UndoIcon /></button>
+          <button onClick={props.onRedo} disabled={!props.canRedo} className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${props.canRedo ? "text-white/60 hover:text-white hover:bg-white/10" : "opacity-20 pointer-events-none"}`}><RedoIcon /></button>
+        </div>
+        
+        <div className="flex items-center gap-1 px-1 border-r border-white/10">
+          <div className="relative group p-1">
+             <div className="w-8 h-8 rounded-full border-2 border-white/20 shadow-inner" style={{ backgroundColor: props.color }} />
+             <input type="color" value={props.color} onChange={(e) => props.setColor(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" title="Select Color" />
+          </div>
+          <button onClick={props.onDelete} disabled={!props.canDelete} className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${props.canDelete ? "text-red-500 hover:bg-red-500/10" : "opacity-20 pointer-events-none"}`}><TrashIcon /></button>
+          <button onClick={props.onToggleLibrary} title="Library" className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${props.showLibrary ? "bg-indigo-500/20 text-indigo-400" : "text-white/60 hover:bg-white/10"}`}><LibraryIcon /></button>
+          <button onClick={props.onToggleTimeline} title={props.showTimeline ? "Hide Timeline" : "Show Timeline"} className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${props.showTimeline ? "bg-blue-500/20 text-blue-400" : "text-white/60 hover:bg-white/10"}`}><TimerIcon /></button>
+        </div>
+
+        <div className="flex items-center gap-1 pl-1">
+          <button onClick={() => props.onToggleHandDrawn(!props.handDrawn)} title="Rough.js" className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${props.handDrawn ? "bg-amber-400/20 text-amber-400 shadow-md" : "text-white/60 hover:bg-white/10"}`}><PencilLineIcon /></button>
+          <button onClick={props.onTogglePresentation} title="Presentation" className="w-10 h-10 flex items-center justify-center rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all"><PresentationIcon /></button>
+          <button onClick={() => props.onToggleDark(!props.isDark)} title="Theme" className="w-10 h-10 flex items-center justify-center rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all">{props.isDark ? <SunIcon /> : <MoonIcon />}</button>
+        </div>
       </div>
-    <p className="ml-2 text-xs opacity-70">
-        ⌫ Use <b>Backspace</b> or <b>Delete</b> to remove a shape
-      </p>
-
-      {/* 🧭 Page Tabs */}
-      <div className="ml-auto hidden md:flex gap-2 overflow-x-auto">
-        {pages.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => onSelectPage(p.id)}
-            className={`px-2 py-1 rounded-md text-xs font-medium transition shadow-sm ${
-              activePageId === p.id
-                ? "bg-blue-600 text-white"
-                : isDark
-                ? "bg-[#1E293B] hover:bg-[#334155] text-[#EDEDED]"
-                : "bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#111111]"
-            }`}
-          >
-            {p.name}
-          </button>
-        ))}
-      </div>
-
-      {/* 🌓 Theme Toggle */}
-      <button
-        onClick={() => onToggleDark(!isDark)}
-        className={`px-3 py-1 rounded-md border text-sm transition shadow-sm ${
-          isDark
-            ? "bg-[#1E293B] text-[#EDEDED] border-[#334155] hover:bg-[#334155]"
-            : "bg-[#FFFFFF] text-[#111111] border-[#E5E7EB] hover:bg-[#F3F4F6]"
-        }`}
-      >
-        {isDark ? "☀️ Light" : "🌙 Dark"}
-      </button>
-
-    </div>
+    </>
   );
 }

@@ -5,6 +5,8 @@ export type Tool =
   | "arrow"
   | "rectangle"
   | "text"
+  | "sticky"
+  | "select"
   | "none";
 
 export interface Point {
@@ -12,22 +14,36 @@ export interface Point {
   y: number;
 }
 
+export interface Comment {
+  id: string;
+  userId: string;
+  username: string;
+  text: string;
+  timestamp: number;
+}
+
 export interface Shape {
   id: string;
   type: Tool;
   start?: Point;
   end?: Point;
-  path?: Point[]; // For pencil
-  isSelected?: boolean;
-  rotation?: number; // degrees
+  path?: Point[]; 
+  rotation?: number; 
   width?: number;
   height?: number;
-
-  // For text shapes
   text?: string;
   x?: number;
   y?: number;
   color?: string;
   fontSize?: number;
   fontFamily?: string;
+  seed: number; 
+  strokeWidth?: number;
+  opacity?: number;
+  roughness?: number;
+  comments?: Comment[];
+  anchoredStartId?: string;
+  anchoredEndId?: string;  
+  audioUrl?: string; // Feature 6
 }
+

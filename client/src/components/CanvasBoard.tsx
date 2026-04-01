@@ -1,636 +1,250 @@
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useMemo } from "react";
+import rough from "roughjs";
 import type { Shape, Tool, Point } from "../types/shapes";
+import Minimap from "./Minimap";
 
 interface CanvasBoardProps {
   selectedTool: Tool;
-  fontFamily: string;
-  fontSize: number;
   color: string;
   shapes: Shape[];
-  onShapesChange: (shapes: Shape[]) => void;
+  onShapesChange: (shapes: Shape[], pushToHistory?: boolean) => void;
   isDark: boolean;
   selectedShapeId: string | null;
   onSelectShape: (id: string | null) => void;
+  socket: any; 
+  remoteCursors: Record<string, { x: number; y: number; username: string }>;
+  handDrawn: boolean;
+  magicMode: boolean; // Feature: AI Shape Recognition
+  onTransformChange?: (pan: { x: number; y: number }, scale: number) => void;
 }
-
 
 export default function CanvasBoard({
   selectedTool,
-  fontFamily,
-  fontSize,
   color,
   shapes,
   onShapesChange,
   isDark,
+  selectedShapeId,
   onSelectShape,
+  socket,
+  remoteCursors,
+  handDrawn,
+  magicMode,
+  onTransformChange
 }: CanvasBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [scale, setScale] = useState(1);
   const [currentShape, setCurrentShape] = useState<Shape | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const [textEdit, setTextEdit] = useState<{
-    id?: string;
-    x: number;
-    y: number;
-    value: string;
-  } | null>(null);
-  const [canvasSize, setCanvasSize] = useState<{ w: number; h: number }>({
-    w: window.innerWidth,
-    h: window.innerHeight - 80,
-  });
-  const [interaction, setInteraction] = useState<
-    | { type: "none" }
-    | { type: "move"; id: string; startPos: Point }
-    | { type: "resize"; id: string; handle: "br" | "endA" | "endB"; startPos: Point }
-    | { type: "rotate"; id: string; center: Point }
-  >({ type: "none" });
+  const [interaction, setInteraction] = useState<{
+    type: "none" | "pan" | "move" | "resize" | "draw";
+    startPos?: Point;
+    activeId?: string;
+  }>({ type: "none" });
 
-  const getMousePos = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const rc = useMemo(() => {
+    if (canvasRef.current) return rough.canvas(canvasRef.current);
+    return null;
+  }, [canvasRef.current]);
+
+  const toCanvasPos = (e: React.MouseEvent | WheelEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return { x: e.clientX, y: e.clientY };
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    if (!rect) return { x: 0, y: 0 };
+    return {
+      x: (e.clientX - rect.left - pan.x) / scale,
+      y: (e.clientY - rect.top - pan.y) / scale
+    };
   };
 
-  const safePoint = (p?: Point): Point => p ?? { x: 0, y: 0 };
+  useEffect(() => { 
+    render(); 
+    if (onTransformChange) onTransformChange(pan, scale);
+  }, [shapes, currentShape, pan, scale, isDark, selectedShapeId, remoteCursors]);
 
-  const drawAllShapes = (ctx: CanvasRenderingContext2D) => {
-    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    shapes.forEach((shape) => drawShape(ctx, shape));
-    if (selectedId) {
-      const s = shapes.find((sh) => sh.id === selectedId);
-      if (s) drawSelection(ctx, s);
+  const render = () => {
+    const canvas = canvasRef.current; if (!canvas) return;
+    const ctx = canvas.getContext("2d"); if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.save();
+    ctx.translate(pan.x, pan.y); ctx.scale(scale, scale);
+    drawGrid(ctx); shapes.forEach(s => drawShape(s, ctx));
+    if (currentShape) drawShape(currentShape, ctx);
+    if (selectedShapeId) { const s = shapes.find(sh => sh.id === selectedShapeId); if (s) drawSelection(s, ctx); }
+    ctx.restore(); drawCursors(ctx);
+  };
+
+  const drawGrid = (ctx: CanvasRenderingContext2D) => {
+    const gridSize = 50; const opacity = isDark ? 0.05 : 0.1;
+    ctx.strokeStyle = isDark ? "#ffffff" : "#000000"; ctx.lineWidth = 0.5; ctx.globalAlpha = opacity;
+    const left = -pan.x / scale, top = -pan.y / scale, right = (ctx.canvas.width - pan.x) / scale, bottom = (ctx.canvas.height - pan.y) / scale;
+    ctx.beginPath();
+    for (let x = Math.floor(left / gridSize) * gridSize; x < right; x += gridSize) { ctx.moveTo(x, top); ctx.lineTo(x, bottom); }
+    for (let y = Math.floor(top / gridSize) * gridSize; y < bottom; y += gridSize) { ctx.moveTo(left, y); ctx.lineTo(right, y); }
+    ctx.stroke(); ctx.globalAlpha = 1;
+  };
+
+  const drawShape = (s: Shape, ctx: CanvasRenderingContext2D) => {
+    if (!rc) return;
+    const options = { stroke: s.color || (isDark ? "#fff" : "#000"), strokeWidth: s.strokeWidth || 2, roughness: handDrawn ? (s.roughness ?? 1) : 0, bowing: handDrawn ? 1.5 : 0, seed: s.seed };
+    switch (s.type) {
+      case "rectangle": if (!s.start || !s.end) return; rc.rectangle(s.start.x, s.start.y, s.end.x - s.start.x, s.end.y - s.start.y, options); break;
+      case "circle": if (!s.start || !s.end) return; const r = Math.hypot(s.end.x - s.start.x, s.end.y - s.start.y); rc.circle(s.start.x, s.start.y, r * 2, options); break;
+      case "line": if (!s.start || !s.end) return; rc.line(s.start.x, s.start.y, s.end.x, s.end.y, options); break;
+      case "arrow": if (!s.start || !s.end) return; rc.line(s.start.x, s.start.y, s.end.x, s.end.y, options);
+        const angle = Math.atan2(s.end.y - s.start.y, s.end.x - s.start.x); const l = 15;
+        rc.line(s.end.x, s.end.y, s.end.x - l * Math.cos(angle - Math.PI / 6), s.end.y - l * Math.sin(angle - Math.PI / 6), options);
+        rc.line(s.end.x, s.end.y, s.end.x - l * Math.cos(angle + Math.PI / 6), s.end.y - l * Math.sin(angle + Math.PI / 6), options); break;
+      case "pencil": if (s.path && s.path.length > 1) rc.linearPath(s.path.map(p => [p.x, p.y] as [number, number]), options); break;
+      case "text": ctx.fillStyle = s.color || (isDark ? "#fff" : "#000"); ctx.font = `20px Inter`; ctx.fillText(s.text || "", s.x || 0, s.y || 0); break;
+      case "sticky": const sx = s.x || 0, sy = s.y || 0; rc.rectangle(sx, sy, 150, 150, { ...options, fill: s.color || "#fbbf24", fillStyle: "solid", roughness: 0.5 });
+        ctx.fillStyle = "#000"; ctx.font = `14px Inter`; (s.text || "Sticky Note").split("\n").forEach((line, i) => ctx.fillText(line, sx + 10, sy + 25 + i * 20)); break;
     }
   };
 
-  const drawShape = (ctx: CanvasRenderingContext2D, shape: Shape) => {
-    ctx.lineWidth = 2;
-
-    switch (shape.type) {
-      case "pencil":
-        if (shape.path && shape.path.length > 0) {
-          ctx.strokeStyle = shape.color || "#fff";
-          ctx.beginPath();
-          shape.path.forEach((p, i) => {
-            if (i === 0) ctx.moveTo(p.x, p.y);
-            else ctx.lineTo(p.x, p.y);
-          });
-          ctx.stroke();
-        }
-        break;
-
-      case "line": {
-        const start = safePoint(shape.start);
-        const end = safePoint(shape.end);
-        ctx.strokeStyle = shape.color || "#fff";
-        ctx.beginPath();
-        ctx.moveTo(start.x, start.y);
-        ctx.lineTo(end.x, end.y);
-        ctx.stroke();
-        break;
-      }
-
-      case "circle": {
-        const start = safePoint(shape.start);
-        const end = safePoint(shape.end);
-        ctx.strokeStyle = shape.color || "#fff";
-        const radius = Math.hypot(end.x - start.x, end.y - start.y);
-        ctx.beginPath();
-        ctx.arc(start.x, start.y, radius, 0, 2 * Math.PI);
-        ctx.stroke();
-        break;
-      }
-
-      case "rectangle": {
-        const start = safePoint(shape.start);
-        const end = safePoint(shape.end);
-        ctx.strokeStyle = shape.color || "#fff";
-        const x = Math.min(start.x, end.x);
-        const y = Math.min(start.y, end.y);
-        const w = Math.abs(end.x - start.x);
-        const h = Math.abs(end.y - start.y);
-        const angle = ((shape.rotation || 0) * Math.PI) / 180;
-        if (angle) {
-          ctx.save();
-          ctx.translate(x + w / 2, y + h / 2);
-          ctx.rotate(angle);
-          ctx.strokeRect(-w / 2, -h / 2, w, h);
-          ctx.restore();
-        } else {
-          ctx.strokeRect(x, y, w, h);
-        }
-        break;
-      }
-
-      case "arrow": {
-        const start = safePoint(shape.start);
-        const end = safePoint(shape.end);
-        ctx.strokeStyle = shape.color || "#fff";
-        const dx = end.x - start.x;
-        const dy = end.y - start.y;
-        const ang = Math.atan2(dy, dx);
-        const headlen = 10;
-        ctx.beginPath();
-        ctx.moveTo(start.x, start.y);
-        ctx.lineTo(end.x, end.y);
-        ctx.lineTo(
-          end.x - headlen * Math.cos(ang - Math.PI / 6),
-          end.y - headlen * Math.sin(ang - Math.PI / 6)
-        );
-        ctx.moveTo(end.x, end.y);
-        ctx.lineTo(
-          end.x - headlen * Math.cos(ang + Math.PI / 6),
-          end.y - headlen * Math.sin(ang + Math.PI / 6)
-        );
-        ctx.stroke();
-        break;
-      }
-
-      case "text": {
-        if (shape.text != null) {
-          const x = shape.x ?? 0;
-          const y = shape.y ?? 0;
-          ctx.fillStyle = shape.color || "#000";
-          ctx.font = `${shape.fontSize || 16}px ${shape.fontFamily || "Arial"}`;
-          const ang = ((shape.rotation || 0) * Math.PI) / 180;
-          if (ang) {
-            ctx.save();
-            ctx.translate(x, y);
-            ctx.rotate(ang);
-            ctx.fillText(shape.text, 0, 0);
-            ctx.restore();
-          } else {
-            ctx.fillText(shape.text, x, y);
-          }
-        }
-        break;
-      }
-    }
+  const drawSelection = (s: Shape, ctx: CanvasRenderingContext2D) => {
+    ctx.strokeStyle = "#4f46e5"; ctx.lineWidth = 1; ctx.setLineDash([5, 5]);
+    const b = getBounds(s); ctx.strokeRect(b.x - 5, b.y - 5, b.w + 10, b.h + 10); ctx.setLineDash([]);
   };
 
-  const getRectBounds = (shape: Shape) => {
-    const start = safePoint(shape.start);
-    const end = safePoint(shape.end);
-    const x = Math.min(start.x, end.x);
-    const y = Math.min(start.y, end.y);
-    const w = Math.abs(end.x - start.x);
-    const h = Math.abs(end.y - start.y);
-    return { x, y, w, h, cx: x + w / 2, cy: y + h / 2 };
+  const getBounds = (s: Shape) => {
+    if (s.type === "pencil" && s.path) {
+      const xs = s.path.map(p => p.x); const ys = s.path.map(p => p.y);
+      const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+      return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+    }
+    if (s.type === "sticky") return { x: s.x || 0, y: s.y || 0, w: 150, h: 150 };
+    if (s.type === "text") return { x: s.x || 0, y: (s.y || 0) - 20, w: 100, h: 25 };
+    const x = Math.min(s.start!.x, s.end!.x); const y = Math.min(s.start!.y, s.end!.y);
+    const w = Math.abs(s.start!.x - s.end!.x); const h = Math.abs(s.start!.y - s.end!.y);
+    return { x, y, w, h };
   };
 
-  const drawSelection = (ctx: CanvasRenderingContext2D, shape: Shape) => {
-    ctx.save();
-    ctx.strokeStyle = "#4f46e5";
-    ctx.fillStyle = "#4f46e5";
-    ctx.lineWidth = 1;
-    const handleSize = 6;
-    if (shape.type === "rectangle") {
-      const { x, y, w, h } = getRectBounds(shape);
-      // bounding box (not rotated for simplicity)
-      ctx.setLineDash([5, 3]);
-      ctx.strokeRect(x, y, w, h);
-      ctx.setLineDash([]);
-      // bottom-right resize handle
-      ctx.fillRect(x + w - handleSize / 2, y + h - handleSize / 2, handleSize, handleSize);
-      // rotate handle (top-center)
-      const rx = x + w / 2;
-      const ry = y - 20;
-      ctx.beginPath();
-      ctx.arc(rx, ry, 5, 0, 2 * Math.PI);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(x + w / 2, y);
-      ctx.lineTo(rx, ry);
-      ctx.stroke();
-    } else if (shape.type === "line" || shape.type === "arrow") {
-      const a = safePoint(shape.start);
-      const b = safePoint(shape.end);
-      ctx.setLineDash([5, 3]);
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillRect(a.x - handleSize / 2, a.y - handleSize / 2, handleSize, handleSize);
-      ctx.fillRect(b.x - handleSize / 2, b.y - handleSize / 2, handleSize, handleSize);
-    } else if (shape.type === "circle") {
-      const start = safePoint(shape.start);
-      const end = safePoint(shape.end);
-      const r = Math.hypot(end.x - start.x, end.y - start.y);
-      ctx.setLineDash([5, 3]);
-      ctx.beginPath();
-      ctx.arc(start.x, start.y, r, 0, 2 * Math.PI);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      // radius handle at end point
-      ctx.fillRect(end.x - handleSize / 2, end.y - handleSize / 2, handleSize, handleSize);
-    } else if (shape.type === "text") {
-      const width = (shape.fontSize || 16) * (shape.text ? shape.text.length * 0.6 : 4);
-      const height = shape.fontSize || 16;
-      const x = shape.x ?? 0;
-      const y = (shape.y ?? 0) - height;
-      ctx.setLineDash([5, 3]);
-      ctx.strokeRect(x, y, width, height);
-      ctx.setLineDash([]);
-      // rotate handle top-center
-      const rx = x + width / 2;
-      const ry = y - 20;
-      ctx.beginPath();
-      ctx.arc(rx, ry, 5, 0, 2 * Math.PI);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(x + width / 2, y);
-      ctx.lineTo(rx, ry);
-      ctx.stroke();
-    }
-    ctx.restore();
+  const drawCursors = (ctx: CanvasRenderingContext2D) => {
+    Object.entries(remoteCursors).forEach(([_id, pos]) => {
+      const screenX = pos.x * scale + pan.x, screenY = pos.y * scale + pan.y;
+      ctx.fillStyle = "#ff4757"; ctx.beginPath(); ctx.moveTo(screenX, screenY); ctx.lineTo(screenX + 15, screenY + 5); ctx.lineTo(screenX + 5, screenY + 15); ctx.fill();
+      ctx.font = "10px Inter"; ctx.fillText(pos.username || "Guest", screenX + 10, screenY + 25);
+    });
   };
 
-  const hitTest = (
-    p: Point
-  ): { id: string; handle?: "br" | "endA" | "endB" | "rotate" } | null => {
-    const handleSize = 8;
-    // Prioritize handles for currently selected shape
-    const shape = shapes.find((s) => s.id === selectedId);
-    if (shape) {
-      if (shape.type === "rectangle") {
-        const { x, y, w, h } = getRectBounds(shape);
-        // bottom-right handle
-        if (p.x >= x + w - handleSize && p.x <= x + w + handleSize && p.y >= y + h - handleSize && p.y <= y + h + handleSize) {
-          return { id: shape.id, handle: "br" };
-        }
-        // rotate (top-center approx circle area)
-        const rx = x + w / 2;
-        const ry = y - 20;
-        if (Math.hypot(p.x - rx, p.y - ry) <= 8) return { id: shape.id, handle: "rotate" as any };
+  const getAnchorPoint = (pos: Point) => {
+    const snapThreshold = 40;
+    const target = shapes.find(s => {
+      if (s.type === "rectangle" || s.type === "sticky" || s.type === "circle") {
+        const b = getBounds(s);
+        return pos.x >= b.x - snapThreshold && pos.x <= b.x + b.w + snapThreshold && 
+               pos.y >= b.y - snapThreshold && pos.y <= b.y + b.h + snapThreshold;
       }
-      if (shape.type === "line" || shape.type === "arrow") {
-        const s = safePoint(shape.start);
-        const e = safePoint(shape.end);
-        if (Math.abs(p.x - s.x) <= handleSize && Math.abs(p.y - s.y) <= handleSize) return { id: shape.id, handle: "endA" };
-        if (Math.abs(p.x - e.x) <= handleSize && Math.abs(p.y - e.y) <= handleSize) return { id: shape.id, handle: "endB" };
-      }
-      if (shape.type === "circle") {
-        const e = safePoint(shape.end);
-        if (Math.abs(p.x - e.x) <= handleSize && Math.abs(p.y - e.y) <= handleSize) return { id: shape.id, handle: "endB" };
-      }
-      if (shape.type === "text") {
-        const width = (shape.fontSize || 16) * (shape.text ? shape.text.length * 0.6 : 4);
-        const height = shape.fontSize || 16;
-        const x = shape.x ?? 0;
-        const y = (shape.y ?? 0) - height;
-        const rx = x + width / 2;
-        const ry = y - 20;
-        if (Math.hypot(p.x - rx, p.y - ry) <= 8) return { id: shape.id, handle: "rotate" as any };
-      }
-    }
-
-    // Shape body (iterate top-down)
-    for (let i = shapes.length - 1; i >= 0; i--) {
-      const s = shapes[i];
-      if (s.type === "rectangle") {
-        const { x, y, w, h } = getRectBounds(s);
-        if (p.x >= x && p.x <= x + w && p.y >= y && p.y <= y + h) return { id: s.id };
-      } else if (s.type === "circle") {
-        const start = safePoint(s.start);
-        const end = safePoint(s.end);
-        const r = Math.hypot(end.x - start.x, end.y - start.y);
-        if (Math.hypot(p.x - start.x, p.y - start.y) <= r) return { id: s.id };
-      } else if (s.type === "line" || s.type === "arrow") {
-        const start = safePoint(s.start);
-        const end = safePoint(s.end);
-        const dist = pointToSegmentDistance(p, start, end);
-        if (dist <= 6) return { id: s.id };
-      } else if (s.type === "pencil") {
-        const path = s.path || [];
-        for (let j = 0; j < path.length - 1; j++) {
-          if (pointToSegmentDistance(p, path[j], path[j + 1]) <= 6) return { id: s.id };
-        }
-      } else if (s.type === "text") {
-        const width = (s.fontSize || 16) * (s.text ? s.text.length * 0.6 : 4);
-        const height = s.fontSize || 16;
-        const x = s.x ?? 0;
-        const y = (s.y ?? 0) - height;
-        if (p.x >= x && p.x <= x + width && p.y >= y && p.y <= y + height) return { id: s.id };
-      }
-    }
+      return false;
+    });
+    if (target) { const b = getBounds(target); return { id: target.id, point: { x: b.x + b.w / 2, y: b.y + b.h / 2 } }; }
     return null;
   };
 
-  const pointToSegmentDistance = (p: Point, a: Point, b: Point) => {
-    const vx = b.x - a.x;
-    const vy = b.y - a.y;
-    const wx = p.x - a.x;
-    const wy = p.y - a.y;
-    const c1 = vx * wx + vy * wy;
-    if (c1 <= 0) return Math.hypot(p.x - a.x, p.y - a.y);
-    const c2 = vx * vx + vy * vy;
-    if (c2 <= c1) return Math.hypot(p.x - b.x, p.y - b.y);
-    const t = c1 / c2;
-    const projx = a.x + t * vx;
-    const projy = a.y + t * vy;
-    return Math.hypot(p.x - projx, p.y - projy);
-  };
-
-  useEffect(() => {
-    const ctx = canvasRef.current?.getContext("2d");
-    if (ctx) {
-      // Set background color first
-      ctx.fillStyle = isDark ? "#0f172a" : "#ffffff"; // dark or white background
-      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-
-      drawAllShapes(ctx);
+  const handleMouseDown = (e: React.MouseEvent) => {
+    const pos = toCanvasPos(e);
+    if (e.button === 1 || (e.button === 0 && selectedTool === "none")) { setInteraction({ type: "pan", startPos: { x: e.clientX, y: e.clientY } }); return; }
+    if (selectedTool === "select") {
+      const hit = shapes.find(s => { const b = getBounds(s); return pos.x >= b.x && pos.x <= b.x + b.w && pos.y >= b.y && pos.y <= b.y + b.h; });
+      onSelectShape(hit?.id || null); if (hit) setInteraction({ type: "move", activeId: hit.id, startPos: pos }); return;
     }
-  }, [shapes, isDark]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
-        const updatedShapes = shapes.filter((s) => s.id !== selectedId);
-        onShapesChange(updatedShapes);
-        setSelectedId(null);
-        onSelectShape?.(null);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedId, shapes, onShapesChange, onSelectShape]);
-
-  useEffect(() => {
-    if (textEdit && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
+    if (selectedTool === "text" || selectedTool === "sticky") {
+       const value = prompt("Enter text", "");
+       if (value) { onShapesChange([...shapes, { id: crypto.randomUUID(), type: selectedTool, x: pos.x, y: pos.y, text: value, color: selectedTool === "sticky" ? "#fbbf24" : color, seed: Math.floor(Math.random() * 2**31) }]); } return;
     }
-  }, [textEdit]);
-
-  useEffect(() => {
-    const measure = () => {
-      const toolbar = document.getElementById("toolbar");
-      const th = toolbar ? toolbar.getBoundingClientRect().height : 64;
-      setCanvasSize({ w: window.innerWidth, h: Math.max(200, window.innerHeight - th) });
-      // ensure canvas element size is updated on DOM
-      const c = canvasRef.current;
-      if (c) {
-        c.width = Math.max(200, window.innerWidth);
-        c.height = Math.max(200, Math.max(200, window.innerHeight - th));
-      }
-    };
-    const onResize = () => measure();
-    window.addEventListener("resize", onResize);
-    measure();
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const pos = getMousePos(e);
-
-    // If inline text editor is open, commit it before any other action
-    if (textEdit) {
-      commitText(textEdit.value);
-    }
-
-    // Check selection/handles first
-    const hit = hitTest(pos);
-    if (hit) {
-      setSelectedId(hit.id);
-      onSelectShape?.(hit.id);
-      const s = shapes.find((sh) => sh.id === hit.id)!;
-      if (hit.handle === "br") {
-        setInteraction({ type: "resize", id: s.id, handle: "br", startPos: pos });
-        return;
-      }
-      if (hit.handle === "endA") {
-        setInteraction({ type: "resize", id: s.id, handle: "endA", startPos: pos });
-        return;
-      }
-      if (hit.handle === "endB") {
-        setInteraction({ type: "resize", id: s.id, handle: "endB", startPos: pos });
-        return;
-      }
-      if ((hit as any).handle === "rotate") {
-        // compute center
-        let center: Point = { x: 0, y: 0 };
-        if (s.type === "rectangle") {
-          const b = getRectBounds(s);
-          center = { x: b.cx, y: b.cy };
-        } else if (s.type === "text") {
-          const width = (s.fontSize || 16) * (s.text ? s.text.length * 0.6 : 4);
-          const height = s.fontSize || 16;
-          center = { x: (s.x || 0) + width / 2, y: (s.y || 0) - height / 2 };
-        }
-        setInteraction({ type: "rotate", id: s.id, center });
-        return;
-      }
-      setInteraction({ type: "move", id: s.id, startPos: pos });
-      return;
-    }
-
-    // Handle text tool: popup to add text
-    if (selectedTool === "text") {
-      const value = prompt("Enter text", "");
-      if (value && value.trim()) {
-        const newText: Shape = {
-          id: crypto.randomUUID(),
-          type: "text",
-          text: value.trim(),
-          x: pos.x,
-          y: pos.y,
-          color: color || "#000",
-          fontSize,
-          fontFamily,
-        };
-        onShapesChange([...shapes, newText]);
-      }
-      return;
-    }
-
-    // Create new shape
-    if (selectedTool !== "none") {
-      const newShape: Shape = {
-        id: crypto.randomUUID(),
-        type: selectedTool,
-        start: pos,
-        end: pos,
-        path: selectedTool === "pencil" ? [pos] : [],
-        color,
-      };
-      setCurrentShape(newShape);
+    if (selectedTool !== "none" && (selectedTool as any) !== "comment") {
+      const anchor = (selectedTool === "arrow" || selectedTool === "line") ? getAnchorPoint(pos) : null;
+      setCurrentShape({ id: crypto.randomUUID(), type: selectedTool, start: anchor ? anchor.point : pos, end: pos, path: [pos], color, seed: Math.floor(Math.random() * 2**31), roughness: 1, anchoredStartId: anchor?.id });
+      setInteraction({ type: "draw" });
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const pos = getMousePos(e);
-
-    // Handle interactions (move/resize/rotate)
-    if (interaction.type === "move") {
-      const sIdx = shapes.findIndex((sh) => sh.id === interaction.id);
-      if (sIdx >= 0) {
-        const dx = pos.x - interaction.startPos.x;
-        const dy = pos.y - interaction.startPos.y;
-        const s = shapes[sIdx];
-        let updated: Shape = { ...s };
-        if (s.type === "rectangle" || s.type === "circle" || s.type === "line" || s.type === "arrow") {
-          const start = safePoint(s.start);
-          const end = safePoint(s.end);
-          updated = {
-            ...s,
-            start: { x: start.x + dx, y: start.y + dy },
-            end: { x: end.x + dx, y: end.y + dy },
-          };
-        } else if (s.type === "pencil") {
-          updated = {
-            ...s,
-            path: (s.path || []).map((p) => ({ x: p.x + dx, y: p.y + dy })),
-          } as Shape;
-        } else if (s.type === "text") {
-          updated = { ...s, x: (s.x || 0) + dx, y: (s.y || 0) + dy };
+  const handleMouseMove = (e: React.MouseEvent) => {
+    const pos = toCanvasPos(e); socket?.emit("cursor-move", { x: pos.x, y: pos.y });
+    if (interaction.type === "pan") {
+      const dx = e.clientX - interaction.startPos!.x; const dy = e.clientY - interaction.startPos!.y;
+      setPan(prev => ({ x: prev.x + dx, y: prev.y + dy })); setInteraction(prev => ({ ...prev, startPos: { x: e.clientX, y: e.clientY } })); return;
+    }
+    if (interaction.type === "draw" && currentShape) {
+       const anchor = (currentShape.type === "arrow" || currentShape.type === "line") ? getAnchorPoint(pos) : null;
+       const updated = { ...currentShape, end: anchor ? anchor.point : pos, anchoredEndId: anchor?.id };
+       if (currentShape.type === "pencil") updated.path = [...(currentShape.path || []), pos];
+       setCurrentShape(updated);
+    }
+    if (interaction.type === "move" && interaction.activeId) {
+      const dx = pos.x - interaction.startPos!.x; const dy = pos.y - interaction.startPos!.y;
+      const updatedShapes = shapes.map(s => {
+        if (s.id !== interaction.activeId) {
+          if (s.anchoredStartId === interaction.activeId || s.anchoredEndId === interaction.activeId) {
+            const anchor = shapes.find(item => item.id === interaction.activeId);
+            if (anchor) {
+              const b = getBounds(anchor); const cx = b.x + b.w / 2 + dx, cy = b.y + b.h / 2 + dy;
+              if (s.anchoredStartId === interaction.activeId) return { ...s, start: { x: cx, y: cy } };
+              if (s.anchoredEndId === interaction.activeId) return { ...s, end: { x: cx, y: cy } };
+            }
+          }
+          return s;
         }
-        const next = [...shapes];
-        next[sIdx] = updated;
-        onShapesChange(next);
-        setInteraction({ ...interaction, startPos: pos });
-      }
-      return;
+        if (s.type === "pencil") return { ...s, path: s.path?.map(p => ({ x: p.x + dx, y: p.y + dy })) };
+        if (s.type === "sticky" || s.type === "text") return { ...s, x: (s.x || 0) + dx, y: (s.y || 0) + dy };
+        return { ...s, start: s.start ? { x: s.start.x + dx, y: s.start.y + dy } : undefined, end: s.end ? { x: s.end.x + dx, y: s.end.y + dy } : undefined };
+      });
+      onShapesChange(updatedShapes); setInteraction(prev => ({ ...prev, startPos: pos }));
     }
-
-    if (interaction.type === "resize") {
-      const sIdx = shapes.findIndex((sh) => sh.id === interaction.id);
-      if (sIdx >= 0) {
-        const s = shapes[sIdx];
-        let updated: Shape = { ...s };
-        if (s.type === "rectangle") {
-          updated = { ...s, end: pos };
-        } else if (s.type === "line" || s.type === "arrow") {
-          if (interaction.handle === "endA") updated = { ...s, start: pos };
-          else updated = { ...s, end: pos };
-        } else if (s.type === "circle") {
-          updated = { ...s, end: pos };
-        }
-        const next = [...shapes];
-        next[sIdx] = updated;
-        onShapesChange(next);
-      }
-      return;
-    }
-
-    if (interaction.type === "rotate") {
-      const sIdx = shapes.findIndex((sh) => sh.id === interaction.id);
-      if (sIdx >= 0) {
-        const s = shapes[sIdx];
-        const angle = (Math.atan2(pos.y - interaction.center.y, pos.x - interaction.center.x) * 180) / Math.PI;
-        const next = [...shapes];
-        next[sIdx] = { ...s, rotation: angle };
-        onShapesChange(next);
-      }
-      return;
-    }
-
-    if (!currentShape) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const updated: Shape = { ...currentShape, end: pos };
-    if (selectedTool === "pencil") {
-      updated.path = [...(currentShape.path || []), pos];
-    }
-
-    drawAllShapes(ctx);
-    drawShape(ctx, updated);
-    setCurrentShape(updated);
   };
 
   const handleMouseUp = () => {
-    if (interaction.type !== "none") {
-      setInteraction({ type: "none" });
-    }
-    if (currentShape) {
+    if (interaction.type === "draw" && currentShape) {
+      // AI Shape Recognition (Feature)
+      if (magicMode && currentShape.type === "pencil" && currentShape.path && currentShape.path.length > 10) {
+          const b = getBounds(currentShape);
+          const ratio = b.w / b.h;
+          const pathLen = currentShape.path.length;
+          const boxPerim = (b.w + b.h) * 2;
+          if (pathLen > boxPerim * 0.5) {
+             const finalShape: Shape = {
+                ...currentShape,
+                type: Math.abs(1 - ratio) < 0.3 ? "circle" : "rectangle",
+                start: { x: b.x, y: b.y },
+                end: { x: b.x + b.w, y: b.y + b.h }
+             };
+             onShapesChange([...shapes, finalShape]);
+             setCurrentShape(null); setInteraction({ type: "none" });
+             return;
+          }
+      }
       onShapesChange([...shapes, currentShape]);
-      setCurrentShape(null);
     }
+    setCurrentShape(null); setInteraction({ type: "none" });
   };
 
-  const handleDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const pos = getMousePos(e);
-    const hit = hitTest(pos);
-    if (hit) {
-      const idx = shapes.findIndex((s) => s.id === hit.id);
-      if (idx >= 0 && shapes[idx].type === "text") {
-        const current = shapes[idx];
-        setTextEdit({ id: current.id, x: current.x ?? pos.x, y: current.y ?? pos.y, value: current.text ?? "" });
+  const handleWheel = (e: WheelEvent) => {
+    e.preventDefault();
+    if (e.ctrlKey) {
+      const zoomSpeed = 0.001; const dScale = -e.deltaY * zoomSpeed; const newScale = Math.min(Math.max(scale + dScale, 0.1), 5);
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (rect) {
+        const mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top; const worldX = (mouseX - pan.x) / scale, worldY = (mouseY - pan.y) / scale;
+        setScale(newScale); setPan({ x: mouseX - worldX * newScale, y: mouseY - worldY * newScale });
       }
-    }
+    } else { setPan(prev => ({ x: prev.x - e.deltaX, y: prev.y - e.deltaY })); }
   };
 
-  const commitText = (finalText: string) => {
-    if (!textEdit) return;
-    const value = finalText.trim();
-    if (textEdit.id) {
-      // update existing
-      const idx = shapes.findIndex((s) => s.id === textEdit.id);
-      if (idx >= 0) {
-        const next = [...shapes];
-        next[idx] = { ...next[idx], text: value };
-        onShapesChange(next);
-      }
-    } else if (value) {
-      const newText: Shape = {
-        id: crypto.randomUUID(),
-        type: "text",
-        text: value,
-        x: textEdit.x,
-        y: textEdit.y,
-        color,
-        fontSize,
-        fontFamily,
-      };
-      onShapesChange([...shapes, newText]);
-    }
-    setTextEdit(null);
-  };
+  useEffect(() => {
+    const canvas = canvasRef.current; if (!canvas) return;
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", handleWheel);
+  }, [pan, scale]);
+
+  useEffect(() => {
+    const updateSize = () => { if (canvasRef.current) { canvasRef.current.width = window.innerWidth; canvasRef.current.height = window.innerHeight; } };
+    window.addEventListener("resize", updateSize); updateSize();
+    return () => window.removeEventListener("resize", updateSize);
+  }, []);
 
   return (
-    <div className="relative w-full">
-      <canvas
-        ref={canvasRef}
-        width={canvasSize.w}
-        height={canvasSize.h}
-        className={`border-0 rounded-none cursor-crosshair w-screen transition-colors duration-300 ${
-          isDark ? "bg-[#000000]" : "bg-white"
-        }`}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onDoubleClick={handleDoubleClick}
-      />
-
-      {textEdit && (
-        <input
-          ref={inputRef}
-          value={textEdit.value}
-          onChange={(e) => setTextEdit({ ...textEdit, value: e.target.value })}
-          onBlur={() => commitText(textEdit.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") commitText(textEdit.value);
-            if (e.key === "Escape") setTextEdit(null);
-          }}
-          style={{
-            position: "absolute",
-            left: textEdit.x,
-            top: textEdit.y - fontSize,
-            fontFamily,
-            fontSize,
-            background: isDark ? "rgba(0, 0, 0, 1)" : "rgba(255,255,255,0.9)",
-            color: isDark ? "#ffffff" : color || "#000000",
-            outline: "none",
-            border: "1px solid rgba(203,213,225,1)",
-            padding: "2px 4px",
-            zIndex: 10,
-            minWidth: 120,
-          }}
-        />
-      )}
+    <div className="w-full h-full overflow-hidden bg-transparent">
+      <canvas ref={canvasRef} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} className="block touch-none" />
+      <Minimap shapes={shapes} pan={pan} scale={scale} isDark={isDark} canvasWidth={canvasRef.current?.width || window.innerWidth} canvasHeight={canvasRef.current?.height || window.innerHeight} />
     </div>
   );
 }
