@@ -14,7 +14,6 @@ interface CanvasBoardProps {
   socket: any; 
   remoteCursors: Record<string, { x: number; y: number; username: string }>;
   handDrawn: boolean;
-  magicMode: boolean; // Feature: AI Shape Recognition
   onTransformChange?: (pan: { x: number; y: number }, scale: number) => void;
 }
 
@@ -29,7 +28,6 @@ export default function CanvasBoard({
   socket,
   remoteCursors,
   handDrawn,
-  magicMode,
   onTransformChange
 }: CanvasBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -194,24 +192,6 @@ export default function CanvasBoard({
 
   const handleMouseUp = () => {
     if (interaction.type === "draw" && currentShape) {
-      // AI Shape Recognition (Feature)
-      if (magicMode && currentShape.type === "pencil" && currentShape.path && currentShape.path.length > 10) {
-          const b = getBounds(currentShape);
-          const ratio = b.w / b.h;
-          const pathLen = currentShape.path.length;
-          const boxPerim = (b.w + b.h) * 2;
-          if (pathLen > boxPerim * 0.5) {
-             const finalShape: Shape = {
-                ...currentShape,
-                type: Math.abs(1 - ratio) < 0.3 ? "circle" : "rectangle",
-                start: { x: b.x, y: b.y },
-                end: { x: b.x + b.w, y: b.y + b.h }
-             };
-             onShapesChange([...shapes, finalShape]);
-             setCurrentShape(null); setInteraction({ type: "none" });
-             return;
-          }
-      }
       onShapesChange([...shapes, currentShape]);
     }
     setCurrentShape(null); setInteraction({ type: "none" });

@@ -3,8 +3,8 @@ import {
   CursorIcon, PencilIcon, LineIcon, RectIcon, CircleIcon, 
   TextIcon, StickyIcon, TrashIcon, UndoIcon, RedoIcon, 
   ImageIcon, PaintIcon, SunIcon, MoonIcon, PencilLineIcon,
-  PresentationIcon, LibraryIcon, ShareIcon, SparklesIcon, GridIcon,
-  MessageCircleIcon, WandIcon, FlameIcon, TimerIcon
+  PresentationIcon, LibraryIcon, ShareIcon,
+  MessageCircleIcon, TimerIcon
 } from "./Icons";
 
 interface ToolbarProps {
@@ -33,12 +33,6 @@ interface ToolbarProps {
   showLibrary: boolean;
   onToggleLibrary: () => void;
   onShare: () => void;
-  onOpenAI: () => void;
-  onAutoLayout: () => void;
-  magicMode: boolean;
-  onToggleMagic: () => void;
-  heatmapMode: boolean;
-  onToggleHeatmap: () => void;
   showTimeline: boolean;
   onToggleTimeline: () => void;
 }
@@ -61,7 +55,7 @@ export default function Toolbar(props: ToolbarProps) {
     <>
       {/* 1. Main Tools & AI (Top Center) */}
       <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 p-1.5 bg-white/10 dark:bg-black/40 backdrop-blur-3xl border border-white/20 dark:border-white/5 rounded-2xl shadow-3xl transition-all duration-500 ${isPresenting ? "-translate-y-20 opacity-0" : "translate-y-0 opacity-100"}`}>
-        <div className="flex items-center gap-1 border-r border-white/10 pr-1">
+        <div className="flex items-center gap-1">
           {mainTools.map((t) => (
             <button
               key={t.id}
@@ -74,12 +68,6 @@ export default function Toolbar(props: ToolbarProps) {
               {t.icon}
             </button>
           ))}
-        </div>
-        <div className="flex items-center gap-1">
-          <button type="button" onClick={props.onOpenAI} title="AI Text-Link" className="w-10 h-10 flex items-center justify-center rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-all hover:scale-105"><SparklesIcon /></button>
-          <button onClick={props.onAutoLayout} title="Auto-Layout" className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white/10 text-white/60"><GridIcon /></button>
-          <button onClick={props.onToggleMagic} title="AI Magic" className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${props.magicMode ? "bg-purple-500/20 text-purple-400 border border-purple-500/30" : "hover:bg-white/10 text-white/60"}`}><WandIcon /></button>
-          <button onClick={props.onToggleHeatmap} title="Heatmap" className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${props.heatmapMode ? "bg-red-500/20 text-red-500 animate-pulse" : "hover:bg-white/10 text-white/60"}`}><FlameIcon /></button>
         </div>
       </div>
 
@@ -102,8 +90,8 @@ export default function Toolbar(props: ToolbarProps) {
       {/* 4. Action Menu & Settings (Bottom Center) */}
       <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 p-1.5 bg-white/10 dark:bg-black/40 backdrop-blur-3xl border border-white/20 dark:border-white/5 rounded-2xl shadow-3xl transition-all duration-500 ${isPresenting ? "translate-y-20 opacity-0" : "translate-y-0 opacity-100"}`}>
         <div className="flex items-center gap-1 border-r border-white/10 pr-1">
-          <button onClick={props.onUndo} disabled={!props.canUndo} className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${props.canUndo ? "text-white/60 hover:text-white hover:bg-white/10" : "opacity-20 pointer-events-none"}`}><UndoIcon /></button>
-          <button onClick={props.onRedo} disabled={!props.canRedo} className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${props.canRedo ? "text-white/60 hover:text-white hover:bg-white/10" : "opacity-20 pointer-events-none"}`}><RedoIcon /></button>
+          <button onClick={props.onUndo} disabled={!props.canUndo} className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${props.canUndo ? "text-white/60 hover:text-white hover:bg-white/10" : "text-white/30 opacity-50 cursor-not-allowed disabled:pointer-events-none"}`}><UndoIcon /></button>
+          <button onClick={props.onRedo} disabled={!props.canRedo} className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${props.canRedo ? "text-white/60 hover:text-white hover:bg-white/10" : "text-white/30 opacity-50 cursor-not-allowed disabled:pointer-events-none"}`}><RedoIcon /></button>
         </div>
         
         <div className="flex items-center gap-1 px-1 border-r border-white/10">
@@ -111,7 +99,7 @@ export default function Toolbar(props: ToolbarProps) {
              <div className="w-8 h-8 rounded-full border-2 border-white/20 shadow-inner" style={{ backgroundColor: props.color }} />
              <input type="color" value={props.color} onChange={(e) => props.setColor(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" title="Select Color" />
           </div>
-          <button onClick={props.onDelete} disabled={!props.canDelete} className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${props.canDelete ? "text-red-500 hover:bg-red-500/10" : "opacity-20 pointer-events-none"}`}><TrashIcon /></button>
+          <button onClick={props.onDelete} disabled={!props.canDelete} className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${props.canDelete ? "text-red-500 hover:bg-red-500/10" : "text-white/30 opacity-50 cursor-not-allowed disabled:pointer-events-none"}`}><TrashIcon /></button>
           <button onClick={props.onToggleLibrary} title="Library" className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${props.showLibrary ? "bg-indigo-500/20 text-indigo-400" : "text-white/60 hover:bg-white/10"}`}><LibraryIcon /></button>
           <button onClick={props.onToggleTimeline} title={props.showTimeline ? "Hide Timeline" : "Show Timeline"} className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${props.showTimeline ? "bg-blue-500/20 text-blue-400" : "text-white/60 hover:bg-white/10"}`}><TimerIcon /></button>
         </div>

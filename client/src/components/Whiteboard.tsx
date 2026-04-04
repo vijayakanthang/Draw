@@ -5,9 +5,7 @@ import CanvasBoard from "./CanvasBoard";
 import HistoryScrubber from "./HistoryScrubber";
 import ComponentLibrary from "./ComponentLibrary";
 import PresenceAvatars from "./PresenceAvatars";
-import AICommandPalette from "./AICommandPalette";
 import CommentOverlay from "./CommentOverlay";
-import AnalyticsHeatmap from "./AnalyticsHeatmap";
 import type { Shape, Tool } from "../types/shapes";
 
 const socket = io("http://localhost:5000");
@@ -23,9 +21,6 @@ export default function Whiteboard() {
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
   const [showLibrary, setShowLibrary] = useState<boolean>(false);
   const [isReadOnly, setIsReadOnly] = useState<boolean>(false);
-  const [showAI, setShowAI] = useState<boolean>(false);
-  const [magicMode, setMagicMode] = useState<boolean>(true);
-  const [showHeatmap, setShowHeatmap] = useState<boolean>(false);
   const [showTimeline, setShowTimeline] = useState<boolean>(false);
   
   // Board Transform State (Panned & Zoomed)
@@ -77,7 +72,6 @@ export default function Whiteboard() {
   const handleRedo = () => { if (historyIndex >= history.length - 1) return; const i = historyIndex + 1; setHistoryIndex(i); updateShapes(history[i], false); };
   const handleCreatePage = () => { const n = { id: crypto.randomUUID(), name: `Page ${pages.length + 1}`, shapes: [] }; const nP = [...pages, n]; setPages(nP); setActivePageId(n.id); socket.emit("page-update", { pages: nP, activePageId: n.id }); };
   const handleAddCommentToShape = (sId: string, text: string) => { updateShapes(activePage.shapes.map(s => s.id === sId ? { ...s, comments: [...(s.comments || []), { id: crypto.randomUUID(), userId: "me", username: "Author", text, timestamp: Date.now() }] } : s)); };
-  const handleAutoLayout = () => { const b = activePage.shapes.filter(s => s.type !== "pencil" && s.type !== "line" && s.type !== "arrow"); if (b.length < 2) return; const g = 240; updateShapes(activePage.shapes.map(s => { const i = b.findIndex(sh => sh.id === s.id); return i !== -1 ? { ...s, x: 200 + (i % 4) * g, y: 300 + Math.floor(i / 4) * g } : s; })); };
 
   return (
     <div className={`flex flex-col h-screen w-screen transition-colors duration-500 overflow-hidden ${isDark ? "bg-[#0f172a]" : "bg-[#f8fafc]"}`}>
@@ -93,9 +87,6 @@ export default function Whiteboard() {
         isPresenting={isPresenting} onTogglePresentation={() => setIsPresenting(!isPresenting)}
         showLibrary={showLibrary} onToggleLibrary={() => setShowLibrary(!showLibrary)}
         onShare={() => { const u = new URL(window.location.href); u.searchParams.set("mode", "readonly"); navigator.clipboard.writeText(u.toString()); alert("Link copied!"); }}
-        onOpenAI={() => setShowAI(true)} onAutoLayout={handleAutoLayout}
-        magicMode={magicMode} onToggleMagic={() => setMagicMode(!magicMode)}
-        heatmapMode={showHeatmap} onToggleHeatmap={() => setShowHeatmap(!showHeatmap)}
         showTimeline={showTimeline} onToggleTimeline={() => setShowTimeline(!showTimeline)}
       />
       )}
@@ -105,19 +96,16 @@ export default function Whiteboard() {
       <div className={`fixed top-[88px] right-6 transition-opacity z-[60] ${isPresenting ? "opacity-0" : "opacity-100"}`}>
         <PresenceAvatars users={presence} currentPageId={activePageId} />
       </div>
-      
-      <AICommandPalette isVisible={showAI} onClose={() => setShowAI(false)} onGenerate={(s) => updateShapes([...activePage.shapes, ...s])} isDark={isDark} />
 
       <main className="flex-grow relative overflow-hidden bg-transparent">
         <CanvasBoard 
           selectedTool={selectedTool} color={color} shapes={activePage.shapes} onShapesChange={updateShapes} isDark={isDark} selectedShapeId={selectedShapeId} onSelectShape={setSelectedShapeId} 
-          socket={socket} remoteCursors={remoteCursors} handDrawn={handDrawn} magicMode={magicMode}
+          socket={socket} remoteCursors={remoteCursors} handDrawn={handDrawn}
           onTransformChange={(p, s) => { setPan(p); setScale(s); }}
         />
         
-        {/* Heatmap & Overlays now follow the Canvas Transform */}
+        {/* Overlays now follow the Canvas Transform */}
         <div style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`, transformOrigin: "0 0", pointerEvents: "none", position: "absolute", inset: 0 }}>
-            <AnalyticsHeatmap shapes={activePage.shapes} isVisible={showHeatmap} pan={{x:0, y:0}} scale={1} /> 
             {!isPresenting && activePage.shapes.map(s => (s.type === "rectangle" || s.type === "circle" || s.type === "sticky" || s.type === "text") && (
               <div key={`o-${s.id}`} style={{ position: "absolute", left: (s.x || (s.start ? s.start.x : 0)), top: (s.y || (s.start ? s.start.y : 0)) }}>
                 <CommentOverlay shape={s} onAddComment={handleAddCommentToShape} isDark={isDark} />
