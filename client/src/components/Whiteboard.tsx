@@ -403,6 +403,15 @@ export default function Whiteboard() {
   };
 
   // --- Dashboard ---
+  useEffect(() => {
+    if (!isDashboard) {
+      document.body.classList.add("whiteboard-active");
+    } else {
+      document.body.classList.remove("whiteboard-active");
+    }
+    return () => document.body.classList.remove("whiteboard-active");
+  }, [isDashboard]);
+
   if (isDashboard) {
     return (
       <Dashboard 

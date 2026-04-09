@@ -145,3 +145,71 @@ input[type="range"]::-moz-range-thumb {
   cursor: pointer;
   border: 2px solid #1e293b;
 }
+
+/* Mobile Responsiveness & Essential Resets */
+@media (max-width: 768px) {
+  body.whiteboard-active, 
+  body.whiteboard-active #root {
+    position: fixed;
+    overflow: hidden;
+    touch-action: none !important;
+    -webkit-overflow-scrolling: none;
+    overscroll-behavior: none;
+    width: 100vw;
+    height: 100vh;
+  }
+
+  .mobile-hide {
+    display: none !important;
+  }
+  
+  .mobile-scroll-x {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px; /* Prevent cutoff */
+  }
+  .mobile-scroll-x::-webkit-scrollbar {
+    display: none;
+  }
+
+  .glass-strong {
+    backdrop-filter: blur(12px);
+    background: rgba(10, 14, 26, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  /* Sheet animation for mobile sidebar */
+  @keyframes slideUpSheet {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  .animate-sheet {
+    animation: slideUpSheet 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Compact spacing for small phones */
+  .p-10 { padding: 1.25rem !important; }
+  .p-6 { padding: 1rem !important; }
+  .p-4 { padding: 0.75rem !important; }
+  .gap-6 { gap: 0.75rem !important; }
+  .text-4xl { font-size: 1.75rem !important; }
+}
+
+/* Touch targets for accessibility */
+@media (pointer: coarse) {
+  button, input, select {
+    min-height: 44px; /* Standard Apple/Android touch target */
+  }
+  
+  /* Make canvas elements interactive but prevent browser default interactions */
+  canvas {
+    touch-action: none;
+  }
+}
+
+.touch-target {
+  min-width: 44px;
+  min-height: 44px;
+}
+
