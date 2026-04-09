@@ -23,6 +23,7 @@ export default function Whiteboard() {
   const [isReadOnly, setIsReadOnly] = useState<boolean>(false);
   const [showTimeline, setShowTimeline] = useState<boolean>(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
   // Board Transform State
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -506,6 +507,7 @@ export default function Whiteboard() {
         showTimeline={showTimeline} onToggleTimeline={() => setShowTimeline(!showTimeline)}
         onGoHome={handleGoHome}
         connectionStatus={connectionStatus}
+        isSidebarOpen={isSidebarOpen}
       />
       )}
 
@@ -536,6 +538,7 @@ export default function Whiteboard() {
           onApproveUser={handleApproveUser}
           onRejectUser={handleRejectUser}
           onKickUser={handleKickUser}
+          onToggle={setIsSidebarOpen}
         />
       </div>
 

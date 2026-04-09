@@ -1,9 +1,9 @@
 import type { Tool } from "../types/shapes";
 import type { ConnectionStatus } from "../hooks/useSocket";
-import { 
-  CursorIcon, PencilIcon, LineIcon, RectIcon, CircleIcon, 
-  TextIcon, StickyIcon, TrashIcon, UndoIcon, RedoIcon, 
-  ImageIcon, PencilLineIcon, ArrowUpRightIcon,
+import {
+  CursorIcon, PencilIcon, LineIcon, RectIcon, CircleIcon,
+  TextIcon, StickyIcon, TrashIcon, UndoIcon, RedoIcon,
+  ImageIcon, PaintIcon, PencilLineIcon, ArrowUpRightIcon,
   PresentationIcon, LibraryIcon, ShareIcon, HomeIcon,
   MessageCircleIcon, TimerIcon, WifiIcon, WifiOffIcon
 } from "./Icons";
@@ -36,6 +36,7 @@ interface ToolbarProps {
   onToggleTimeline: () => void;
   onGoHome: () => void;
   connectionStatus: ConnectionStatus;
+  isSidebarOpen?: boolean;
 }
 
 const mainTools: { id: Tool; icon: React.ReactNode; label: string }[] = [
@@ -58,13 +59,15 @@ const statusConfig: Record<ConnectionStatus, { color: string; label: string }> =
 };
 
 export default function Toolbar(props: ToolbarProps) {
-  const { isPresenting, connectionStatus } = props;
+  const { isPresenting, connectionStatus, isSidebarOpen } = props;
   const statusInfo = statusConfig[connectionStatus];
 
   return (
     <>
       {/* 1. Main Tools & Collaboration (Top Center) */}
-      <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 p-1 glass-strong rounded-2xl shadow-2xl transition-all duration-500 max-w-[95vw] ${isPresenting ? "-translate-y-24 opacity-0 pointer-events-none" : "translate-y-0 opacity-100"}`}>
+      <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 p-1 glass-strong rounded-2xl shadow-2xl transition-all duration-500 max-w-[95vw] ${isPresenting ? "-translate-y-24 opacity-0 pointer-events-none" : "translate-y-0 opacity-100"
+        } ${isSidebarOpen ? "md:left-[calc(50%-150px)]" : "md:left-1/2"
+        }`}>
         {/* Home Button */}
         <button
           onClick={props.onGoHome}
@@ -82,26 +85,25 @@ export default function Toolbar(props: ToolbarProps) {
               key={t.id}
               onClick={() => props.onSelectTool(t.id)}
               title={t.label}
-              className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all duration-200 flex-shrink-0 ${
-                props.selectedTool === t.id 
-                  ? "bg-blue-600 text-white shadow-lg shadow-blue-600/25" 
+              className={`w-9 h-9 flex items-center justify-center rounded-xl transition-all duration-200 flex-shrink-0 ${props.selectedTool === t.id
+                  ? "bg-blue-600 text-white shadow-lg shadow-blue-600/25"
                   : "hover:bg-white/8 text-white/50 hover:text-white"
-              }`}
+                }`}
             >
               <div className="scale-90">{t.icon}</div>
             </button>
           ))}
         </div>
-        
+
         <div className="w-[1px] h-6 bg-white/8 flex-shrink-0" />
-        
-        <button 
-          onClick={props.onShare} 
+
+        <button
+          onClick={props.onShare}
           className="px-3 h-9 flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black uppercase tracking-wider transition-all shadow-lg shadow-blue-600/20 active:scale-95 flex-shrink-0"
         >
-          <ShareIcon /> 
+          <ShareIcon />
           <span className="mobile-hide">Invite</span>
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span className={`w-2 h-2 rounded-full animate-pulse md:hidden ${connectionStatus === "connected" ? "bg-emerald-400" : "bg-amber-400"}`} />
         </button>
       </div>
 
@@ -115,42 +117,51 @@ export default function Toolbar(props: ToolbarProps) {
           )}
         </div>
         <div className="w-[1px] h-4 bg-white/8" />
-        <button onClick={props.onExportPNG} className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-white/8 text-white/40"><ImageIcon /></button>
+        <div className="flex items-center gap-1">
+          <button onClick={props.onExportPNG} title="Export PNG" className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-white/8 text-white/40 hover:text-white transition-colors"><ImageIcon /></button>
+          <button onClick={props.onExportSVG} title="Export SVG" className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-white/8 text-white/40 hover:text-white transition-colors"><PaintIcon /></button>
+        </div>
       </div>
 
-      {/* 3. Page Navigator (Mobile: bottom left, more compact) */}
-      <div className={`fixed bottom-4 left-4 z-50 flex items-center gap-1.5 p-1 glass-strong rounded-2xl transition-all duration-500 ${isPresenting ? "translate-y-24 opacity-0 pointer-events-none" : "translate-y-0 opacity-100"}`}>
-        <select 
-          value={props.activePageId} 
-          onChange={(e) => props.onSelectPage(e.target.value)} 
-          className="bg-transparent text-[10px] font-black uppercase tracking-widest text-white/50 outline-none border-none py-1 px-2 cursor-pointer hover:text-white transition-colors"
-        >
-          {props.pages.map(p => <option key={p.id} value={p.id} className="bg-slate-900 text-white">{p.name}</option>)}
-        </select>
-        <button onClick={props.onCreatePage} className="w-7 h-7 flex items-center justify-center rounded-lg bg-white/8 hover:bg-white/15 text-white font-bold transition-all">+</button>
-      </div>
+      <div className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col md:flex-row items-center gap-3 transition-all duration-500 max-w-[95vw] ${isPresenting ? "translate-y-24 opacity-0 pointer-events-none" : "translate-y-0 opacity-100"
+        }`}>
+        {/* Page Navigator */}
+        <div className="flex items-center gap-1.5 p-1 glass-strong rounded-2xl">
+          <select
+            value={props.activePageId}
+            onChange={(e) => props.onSelectPage(e.target.value)}
+            className="bg-transparent text-[10px] font-black uppercase tracking-widest text-white/50 outline-none border-none py-1 px-2 cursor-pointer hover:text-white transition-colors"
+          >
+            {props.pages.map(p => <option key={p.id} value={p.id} className="bg-slate-900 text-white">{p.name}</option>)}
+          </select>
+          <button onClick={props.onCreatePage} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/8 hover:bg-white/15 text-white font-bold transition-all">+</button>
+        </div>
 
-      {/* 4. Action Menu & Settings (Bottom Center: Single row, compact for mobile) */}
-      <div className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 p-1 glass-strong rounded-2xl shadow-2xl transition-all duration-500 max-w-[95vw] ${isPresenting ? "translate-y-24 opacity-0 pointer-events-none" : "translate-y-0 opacity-100"}`}>
-        <div className="flex items-center gap-0.5 overflow-x-auto mobile-scroll-x">
-          <button onClick={props.onUndo} disabled={!props.canUndo} className="w-9 h-9 flex items-center justify-center rounded-xl text-white/40 disabled:opacity-20"><UndoIcon /></button>
-          <button onClick={props.onRedo} disabled={!props.canRedo} className="w-9 h-9 flex items-center justify-center rounded-xl text-white/40 disabled:opacity-20"><RedoIcon /></button>
-          
-          <div className="w-[1px] h-5 bg-white/8 mx-1 flex-shrink-0" />
-          
-          <div className="relative p-1 flex-shrink-0">
-            <div className="w-7 h-7 rounded-full border border-white/20" style={{ backgroundColor: props.color }} />
-            <input type="color" value={props.color} onChange={(e) => props.setColor(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
+        {/* Action Menu */}
+        <div className="flex items-center gap-1 p-1 glass-strong rounded-2xl shadow-2xl">
+          <div className="flex items-center gap-0.5 overflow-x-auto mobile-scroll-x">
+            <button onClick={props.onUndo} disabled={!props.canUndo} className="w-10 h-10 flex items-center justify-center rounded-xl text-white/40 disabled:opacity-20 transition-colors"><UndoIcon /></button>
+            <button onClick={props.onRedo} disabled={!props.canRedo} className="w-10 h-10 flex items-center justify-center rounded-xl text-white/40 disabled:opacity-20 transition-colors"><RedoIcon /></button>
+
+            <div className="w-[1px] h-5 bg-white/8 mx-1 flex-shrink-0" />
+
+            <div className="relative p-1 flex-shrink-0">
+              <div className="w-8 h-8 rounded-full border border-white/20 shadow-inner" style={{ backgroundColor: props.color }} />
+              <input type="color" value={props.color} onChange={(e) => props.setColor(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
+            </div>
+
+            <button onClick={props.onDelete} disabled={!props.canDelete} className="w-10 h-10 flex items-center justify-center rounded-xl text-red-500/50 disabled:opacity-20 transition-colors"><TrashIcon /></button>
+            <button onClick={props.onToggleLibrary} className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${props.showLibrary ? "bg-indigo-500/20 text-indigo-400" : "text-white/40"}`}><LibraryIcon /></button>
+
+            <div className="w-[1px] h-5 bg-white/8 mx-1 flex-shrink-0" />
+
+            <button onClick={props.onToggleTimeline} className={`w-10 h-10 flex items-center justify-center rounded-xl ${props.showTimeline ? "bg-blue-500/20 text-blue-400" : "text-white/40"}`}><TimerIcon /></button>
+            <button onClick={() => props.onToggleHandDrawn(!props.handDrawn)} className={`w-10 h-10 flex items-center justify-center rounded-xl ${props.handDrawn ? "bg-amber-400/20 text-amber-400" : "text-white/40"}`}><PencilLineIcon /></button>
+            <button onClick={props.onTogglePresentation} className="w-10 h-10 flex items-center justify-center rounded-xl text-white/40 mobile-hide"><PresentationIcon /></button>
+            <div className="w-[1px] h-5 bg-white/8 mx-1 flex-shrink-0 md:hidden" />
+            <button onClick={props.onExportPNG} title="Export PNG" className="w-10 h-10 flex items-center justify-center rounded-xl text-white/40 md:hidden"><ImageIcon /></button>
+            <button onClick={props.onExportSVG} title="Export SVG" className="w-10 h-10 flex items-center justify-center rounded-xl text-white/40 md:hidden"><PaintIcon /></button>
           </div>
-
-          <button onClick={props.onDelete} disabled={!props.canDelete} className="w-9 h-9 flex items-center justify-center rounded-xl text-red-500/50 disabled:opacity-20"><TrashIcon /></button>
-          <button onClick={props.onToggleLibrary} className={`w-9 h-9 flex items-center justify-center rounded-xl ${props.showLibrary ? "bg-indigo-500/20 text-indigo-400" : "text-white/40"}`}><LibraryIcon /></button>
-          
-          <div className="w-[1px] h-5 bg-white/8 mx-1 flex-shrink-0 mobile-hide" />
-          
-          <button onClick={props.onToggleTimeline} className={`w-9 h-9 flex items-center justify-center rounded-xl mobile-hide ${props.showTimeline ? "bg-blue-500/20 text-blue-400" : "text-white/40"}`}><TimerIcon /></button>
-          <button onClick={() => props.onToggleHandDrawn(!props.handDrawn)} className={`w-9 h-9 flex items-center justify-center rounded-xl mobile-hide ${props.handDrawn ? "bg-amber-400/20 text-amber-400" : "text-white/40"}`}><PencilLineIcon /></button>
-          <button onClick={props.onTogglePresentation} className="w-9 h-9 flex items-center justify-center rounded-xl text-white/40 mobile-hide"><PresentationIcon /></button>
         </div>
       </div>
     </>

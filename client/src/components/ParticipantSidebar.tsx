@@ -28,6 +28,7 @@ interface ParticipantSidebarProps {
   onApproveUser?: (socketId: string, userId: string) => void;
   onRejectUser?: (socketId: string) => void;
   onKickUser?: (socketId: string) => void;
+  onToggle?: (isOpen: boolean) => void;
 }
 
 // Deterministic color from username
@@ -53,8 +54,15 @@ export default function ParticipantSidebar({
   onApproveUser,
   onRejectUser,
   onKickUser,
+  onToggle,
 }: ParticipantSidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
+
+  const toggleSidebar = (open: boolean) => {
+    setIsOpen(open);
+    onToggle?.(open);
+  };
+
   const userList = Object.values(users);
   const hasWaiting = waitingRoom.length > 0;
   
@@ -67,7 +75,7 @@ export default function ParticipantSidebar({
       {/* Toggle Button */}
       {!isOpen && (
         <button 
-          onClick={() => setIsOpen(true)}
+          onClick={() => toggleSidebar(true)}
           className="w-12 h-12 glass-strong rounded-2xl flex items-center justify-center text-white/50 hover:text-white shadow-xl transition-all active:scale-95 relative"
         >
           <UserIcon />
@@ -85,8 +93,8 @@ export default function ParticipantSidebar({
           <div className="p-6 md:p-4 flex items-center justify-between border-b border-white/6">
             <h3 className="text-[10px] font-black uppercase tracking-[0.15em] text-white/35">Collaborators</h3>
             <button 
-              onClick={() => setIsOpen(false)} 
-              className="w-10 h-10 md:w-6 md:h-6 flex items-center justify-center rounded-xl md:rounded-lg text-white/20 hover:text-white hover:bg-white/8 transition-all text-lg md:text-xs"
+              onClick={() => toggleSidebar(false)} 
+              className="w-12 h-12 md:w-8 md:h-8 flex items-center justify-center rounded-xl md:rounded-lg text-white/20 hover:text-white hover:bg-white/8 transition-all text-lg md:text-sm"
             >
               ✕
             </button>

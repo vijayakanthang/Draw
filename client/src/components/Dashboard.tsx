@@ -97,7 +97,7 @@ export default function Dashboard({ onNewRoom, recentRooms, onSelectRoom }: Dash
               Recent Boards
               <div className="flex-grow h-[1px] bg-white/5" />
             </h3>
-            <div className="grid grid-cols-1 gap-2.5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
               {recentRooms.map((r) => (
                 <button 
                   key={r} 
