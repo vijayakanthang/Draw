@@ -53,8 +53,8 @@ export default function Toolbar(props: ToolbarProps) {
 
   return (
     <>
-      {/* 1. Main Tools & AI (Top Center) */}
-      <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 p-1.5 bg-white/10 dark:bg-black/40 backdrop-blur-3xl border border-white/20 dark:border-white/5 rounded-2xl shadow-3xl transition-all duration-500 ${isPresenting ? "-translate-y-20 opacity-0" : "translate-y-0 opacity-100"}`}>
+      {/* 1. Main Tools & Collaboration (Top Center) */}
+      <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 p-1.5 bg-white/10 dark:bg-black/40 backdrop-blur-3xl border border-white/20 dark:border-white/5 rounded-2xl shadow-3xl transition-all duration-500 ${isPresenting ? "-translate-y-20 opacity-0" : "translate-y-0 opacity-100"}`}>
         <div className="flex items-center gap-1">
           {mainTools.map((t) => (
             <button
@@ -69,14 +69,23 @@ export default function Toolbar(props: ToolbarProps) {
             </button>
           ))}
         </div>
+        
+        <div className="w-[1px] h-6 bg-white/10" />
+        
+        <button 
+          onClick={props.onShare} 
+          className="px-4 h-10 flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-black uppercase tracking-wider transition-all shadow-lg active:scale-95 group"
+        >
+          <ShareIcon /> 
+          Invite
+          <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse ml-1" />
+        </button>
       </div>
 
-      {/* 2. Top Right Actions (Export & Share) */}
+      {/* 2. Top Right Actions (Export) */}
       <div className={`fixed top-6 right-6 z-50 flex items-center gap-2 p-1.5 bg-white/10 dark:bg-black/40 backdrop-blur-3xl border border-white/20 dark:border-white/5 rounded-2xl transition-all duration-500 ${isPresenting ? "-translate-y-20 opacity-0" : "translate-y-0 opacity-100"}`}>
         <button onClick={props.onExportPNG} title="Export PNG" className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white/10 text-white/60"><ImageIcon /></button>
         <button onClick={props.onExportSVG} title="Export SVG" className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-white/10 text-white/60"><PaintIcon /></button>
-        <div className="w-[1px] h-6 bg-white/10 mx-1" />
-        <button onClick={props.onShare} title="Share Board" className="px-4 h-10 flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-lg active:scale-95"><ShareIcon /> Share</button>
       </div>
 
       {/* 3. Page Navigator (Bottom Left) */}
