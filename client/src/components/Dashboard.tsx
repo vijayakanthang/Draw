@@ -27,7 +27,7 @@ export default function Dashboard({ onNewRoom, recentRooms, onSelectRoom }: Dash
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen w-full p-6 bg-[#0a0e1a] relative overflow-hidden">
+    <div className="flex items-center justify-center min-h-screen w-full p-4 md:p-6 bg-[#0a0e1a] relative overflow-hidden">
       {/* Animated background grid */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute inset-0" style={{
@@ -44,7 +44,7 @@ export default function Dashboard({ onNewRoom, recentRooms, onSelectRoom }: Dash
 
       <div className="max-w-md w-full relative z-10 animate-fade-in">
         {/* Hero Card */}
-        <div className="p-10 glass-strong rounded-[2rem] shadow-2xl text-center relative overflow-hidden group">
+        <div className="p-6 md:p-10 glass-strong rounded-[2rem] shadow-2xl text-center relative overflow-hidden group">
           <div className="absolute inset-0 bg-gradient-to-br from-blue-600/8 to-indigo-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-1000 pointer-events-none" />
           
           <div className="relative z-10">

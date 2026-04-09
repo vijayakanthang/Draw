@@ -71,7 +71,7 @@ export default function CanvasBoard({
     }
   }, []);
 
-  const toCanvasPos = useCallback((e: React.MouseEvent | MouseEvent | WheelEvent) => {
+  const toCanvasPos = useCallback((e: React.PointerEvent | PointerEvent | React.MouseEvent | MouseEvent | WheelEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
     return {
@@ -220,15 +220,20 @@ export default function CanvasBoard({
     return null;
   };
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const [activePointers, setActivePointers] = useState<Record<number, Point>>({});
+  const lastPinchDistance = useRef<number | null>(null);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
     const pos = toCanvasPos(e);
+    setActivePointers(prev => ({ ...prev, [e.pointerId]: { x: e.clientX, y: e.clientY } }));
+
     if (e.button === 1 || (e.button === 0 && selectedTool === "none")) { setInteraction({ type: "pan", startPos: { x: e.clientX, y: e.clientY } }); return; }
     if (selectedTool === "select") {
       const hit = shapes.find(s => { const b = getBounds(s); return pos.x >= b.x && pos.x <= b.x + b.w && pos.y >= b.y && pos.y <= b.y + b.h; });
       onSelectShape(hit?.id || null); if (hit) setInteraction({ type: "move", activeId: hit.id, startPos: pos }); return;
     }
     if (selectedTool === "text" || selectedTool === "sticky") {
-      // Use inline text input instead of prompt()
       if (onRequestTextInput) {
         const screen = toScreenPos(pos.x, pos.y);
         onRequestTextInput({ x: screen.x, y: screen.y, canvasX: pos.x, canvasY: pos.y }, selectedTool === "sticky");
@@ -242,7 +247,38 @@ export default function CanvasBoard({
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handlePointerMove = (e: React.PointerEvent) => {
+    setActivePointers(prev => ({ ...prev, [e.pointerId]: { x: e.clientX, y: e.clientY } }));
+    const pointers = { ...activePointers, [e.pointerId]: { x: e.clientX, y: e.clientY } };
+    const pointerIds = Object.keys(pointers);
+
+    // Pinch-to-zoom
+    if (pointerIds.length === 2) {
+      const p1 = pointers[Number(pointerIds[0])];
+      const p2 = pointers[Number(pointerIds[1])];
+      const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+      
+      if (lastPinchDistance.current !== null) {
+        const delta = dist / lastPinchDistance.current;
+        const newScale = Math.min(Math.max(scale * delta, 0.1), 5);
+        
+        // Zoom towards the center of the two fingers
+        const centerX = (p1.x + p2.x) / 2;
+        const centerY = (p1.y + p2.y) / 2;
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (rect) {
+          const mouseX = centerX - rect.left, mouseY = centerY - rect.top;
+          const worldX = (mouseX - pan.x) / scale, worldY = (mouseY - pan.y) / scale;
+          setPan({ x: mouseX - worldX * newScale, y: mouseY - worldY * newScale });
+          setScale(newScale);
+        }
+      }
+      lastPinchDistance.current = dist;
+      return;
+    } else {
+      lastPinchDistance.current = null;
+    }
+
     const pos = toCanvasPos(e); 
     socket?.emit("cursor-move", { x: pos.x, y: pos.y, username });
     
@@ -255,8 +291,6 @@ export default function CanvasBoard({
       const updated = { ...currentShape, end: anchor ? anchor.point : pos, anchoredEndId: anchor?.id };
       if (currentShape.type === "pencil") updated.path = [...(currentShape.path || []), pos];
       setCurrentShape(updated);
-      
-      // Broadcast drawing-in-progress to others
       socket?.emit("drawing-in-progress", { shape: updated });
     }
     if (interaction.type === "move" && interaction.activeId) {
@@ -281,7 +315,14 @@ export default function CanvasBoard({
     }
   };
 
-  const handleMouseUp = () => {
+  const handlePointerUp = (e: React.PointerEvent) => {
+    setActivePointers(prev => {
+      const n = { ...prev };
+      delete n[e.pointerId];
+      return n;
+    });
+    lastPinchDistance.current = null;
+
     if (interaction.type === "draw" && currentShape) {
       onShapesChange([...shapes, currentShape]);
       socket?.emit("drawing-finished");
@@ -317,10 +358,10 @@ export default function CanvasBoard({
     <div className="w-full h-full overflow-hidden bg-transparent">
       <canvas 
         ref={canvasRef} 
-        onMouseDown={handleMouseDown} 
-        onMouseMove={handleMouseMove} 
-        onMouseUp={handleMouseUp} 
-        onMouseLeave={handleMouseUp}
+        onPointerDown={handlePointerDown} 
+        onPointerMove={handlePointerMove} 
+        onPointerUp={handlePointerUp} 
+        onPointerLeave={handlePointerUp}
         className="block touch-none" 
         style={{ cursor: selectedTool === "none" ? "grab" : selectedTool === "select" ? "default" : "crosshair" }}
       />

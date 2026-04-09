@@ -75,7 +75,7 @@ export default function Minimap({ shapes, pan, scale, canvasWidth, canvasHeight 
   }, [shapes, pan, scale, canvasWidth, canvasHeight]);
 
   return (
-    <div className="fixed bottom-20 right-5 w-44 h-28 rounded-xl border border-white/8 overflow-hidden shadow-xl bg-[#111827]/80 backdrop-blur-sm pointer-events-none">
+    <div className="fixed bottom-20 right-5 w-44 h-28 rounded-xl border border-white/8 overflow-hidden shadow-xl bg-[#111827]/80 backdrop-blur-sm pointer-events-none mobile-hide">
       <canvas
         ref={minimapRef}
         width={176}
