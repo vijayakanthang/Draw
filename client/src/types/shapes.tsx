@@ -6,6 +6,7 @@ export type Tool =
   | "rectangle"
   | "text"
   | "sticky"
+  | "comment"
   | "select"
   | "none";
 
@@ -27,8 +28,8 @@ export interface Shape {
   type: Tool;
   start?: Point;
   end?: Point;
-  path?: Point[]; 
-  rotation?: number; 
+  path?: Point[];
+  rotation?: number;
   width?: number;
   height?: number;
   text?: string;
@@ -37,13 +38,12 @@ export interface Shape {
   color?: string;
   fontSize?: number;
   fontFamily?: string;
-  seed: number; 
+  seed: number;
   strokeWidth?: number;
   opacity?: number;
   roughness?: number;
   comments?: Comment[];
   anchoredStartId?: string;
-  anchoredEndId?: string;  
-  audioUrl?: string; // Feature 6
+  anchoredEndId?: string;
+  audioUrl?: string;
 }
-

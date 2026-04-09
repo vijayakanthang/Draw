@@ -13,7 +13,9 @@ export default function ComponentLibrary({ onAddShape, isVisible, onClose, selec
 
   useEffect(() => {
     const saved = localStorage.getItem("draw-templates");
-    if (saved) setTemplates(JSON.parse(saved));
+    if (saved) {
+      try { setTemplates(JSON.parse(saved)); } catch { /* ignore */ }
+    }
   }, []);
 
   const saveToLocal = (newTemplates: typeof templates) => {
@@ -23,7 +25,7 @@ export default function ComponentLibrary({ onAddShape, isVisible, onClose, selec
 
   const handleSaveSelected = () => {
     if (!selectedShape) return;
-    const name = prompt("Enter template name:", "My Template");
+    const name = window.prompt("Enter template name:", "My Template");
     if (!name) return;
 
     const newTemplate = {
@@ -39,55 +41,55 @@ export default function ComponentLibrary({ onAddShape, isVisible, onClose, selec
 
   return (
     <div 
-      className="fixed top-24 left-6 z-40 w-64 h-[calc(100vh-12rem)] bg-slate-900/80 backdrop-blur-3xl border border-white/10 rounded-3xl shadow-4xl flex flex-col overflow-hidden animate-in slide-in-from-left duration-500"
+      className="fixed top-20 left-5 z-40 w-64 h-[calc(100vh-10rem)] glass-strong rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slide-left"
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <div className="p-4 border-b border-white/10 flex justify-between items-center bg-white/5">
-        <span className="text-xs font-bold uppercase tracking-widest text-white/60">Library</span>
-        <button onClick={onClose} className="text-white/40 hover:text-white transition-colors">×</button>
+      <div className="p-4 border-b border-white/6 flex justify-between items-center bg-white/3">
+        <span className="text-[10px] font-black uppercase tracking-[0.15em] text-white/50">Library</span>
+        <button onClick={onClose} className="w-6 h-6 flex items-center justify-center rounded-lg text-white/30 hover:text-white hover:bg-white/8 transition-all">×</button>
       </div>
 
-      <div className="flex-grow overflow-y-auto p-4 flex flex-col gap-4">
+      <div className="flex-grow overflow-y-auto p-4 flex flex-col gap-4 custom-scrollbar">
         <div className="flex flex-col gap-2">
           <button
             onClick={handleSaveSelected}
             disabled={!selectedShape}
-            className={`w-full py-3 rounded-2xl text-[10px] font-bold uppercase tracking-wider transition-all shadow-lg ${
+            className={`w-full py-3 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all ${
               selectedShape 
-                ? "bg-blue-600 hover:bg-blue-500 text-white shadow-blue-500/20 active:scale-95 animate-pulse" 
+                ? "bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20 active:scale-95" 
                 : "bg-white/5 text-white/20 cursor-not-allowed"
             }`}
           >
             Save Selected as Template
           </button>
           {!selectedShape && (
-            <p className="text-[9px] text-blue-400/60 text-center animate-pulse">Select a shape on canvas first</p>
+            <p className="text-[9px] text-blue-400/40 text-center">Select a shape on canvas first</p>
           )}
         </div>
 
         {templates.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-40 gap-2 opacity-30">
-            <div className="w-12 h-12 rounded-full border-2 border-dashed border-white/50" />
-            <span className="text-[10px]">No templates yet</span>
+          <div className="flex flex-col items-center justify-center h-40 gap-2 opacity-25">
+            <div className="w-12 h-12 rounded-full border-2 border-dashed border-white/30" />
+            <span className="text-[10px] text-white/50">No templates yet</span>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-3">
+          <div className="grid grid-cols-1 gap-2">
             {templates.map(t => (
               <div 
                 key={t.id}
                 onClick={() => t.shapes.forEach(s => onAddShape({ ...s, id: crypto.randomUUID() }))}
-                className="group relative p-3 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl cursor-pointer transition-all"
+                className="group relative p-3 bg-white/4 hover:bg-white/8 border border-white/5 rounded-xl cursor-pointer transition-all"
               >
-                <span className="text-[11px] font-medium text-white/80">{t.name}</span>
-                <div className="mt-1 text-[9px] text-white/30 uppercase">{t.shapes.length} elements</div>
+                <span className="text-[11px] font-medium text-white/70">{t.name}</span>
+                <div className="mt-1 text-[9px] text-white/25 uppercase">{t.shapes.length} elements</div>
                 <button 
                   onClick={(e) => {
                      e.stopPropagation();
                      const next = templates.filter(temp => temp.id !== t.id);
                      saveToLocal(next);
                   }}
-                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-400 transition-opacity"
+                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 w-5 h-5 rounded flex items-center justify-center text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all"
                 >
                   ×
                 </button>
@@ -97,7 +99,7 @@ export default function ComponentLibrary({ onAddShape, isVisible, onClose, selec
         )}
       </div>
 
-      <div className="p-4 bg-white/5 border-t border-white/10">
+      <div className="p-4 bg-white/3 border-t border-white/6">
         <p className="text-[9px] text-white/20 text-center italic">Click a template to add it to canvas</p>
       </div>
     </div>
