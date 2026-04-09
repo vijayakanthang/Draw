@@ -154,7 +154,7 @@ export default function Whiteboard() {
       if (isPresenting) { if (e.key === "ArrowRight") { const i = pages.findIndex(p => p.id === activePageId); if (i < pages.length - 1) setActivePageId(pages[i + 1].id); } else if (e.key === "ArrowLeft") { const i = pages.findIndex(p => p.id === activePageId); if (i > 0) setActivePageId(pages[i - 1].id); } else if (e.key === "Escape") setIsPresenting(false); return; }
       switch (e.key.toLowerCase()) {
         case "v": setSelectedTool("select"); break; case "p": setSelectedTool("pencil"); break; case "r": setSelectedTool("rectangle"); break; case "o": setSelectedTool("circle"); break; case "t": setSelectedTool("text"); break; case "s": setSelectedTool("sticky"); break; case "c": setSelectedTool("comment" as Tool); break; 
-        case "delete": case "backspace": if (selectedShapeId) { updateShapes(activePage.shapes.filter(s => s.id !== selectedShapeId)); setSelectedShapeId(null); } break;
+        case "delete": case "backspace": if (selectedShapeId && activePage) { updateShapes(activePage.shapes.filter(s => s.id !== selectedShapeId)); setSelectedShapeId(null); } break;
       }
     };
     window.addEventListener("keydown", handleKeyDown); return () => window.removeEventListener("keydown", handleKeyDown);
@@ -169,7 +169,7 @@ export default function Whiteboard() {
   const handleUndo = () => { if (historyIndex <= 0) return; const i = historyIndex - 1; setHistoryIndex(i); updateShapes(history[i], false); };
   const handleRedo = () => { if (historyIndex >= history.length - 1) return; const i = historyIndex + 1; setHistoryIndex(i); updateShapes(history[i], false); };
   const handleCreatePage = () => { const n = { id: crypto.randomUUID(), name: `Page ${pages.length + 1}`, shapes: [] }; const nP = [...pages, n]; setPages(nP); setActivePageId(n.id); socket.emit("page-update", { pages: nP, activePageId: n.id }); };
-  const handleAddCommentToShape = (sId: string, text: string) => { updateShapes(activePage.shapes.map(s => s.id === sId ? { ...s, comments: [...(s.comments || []), { id: crypto.randomUUID(), userId: "me", username: "Author", text, timestamp: Date.now() }] } : s)); };
+  const handleAddCommentToShape = (sId: string, text: string) => { if (activePage) updateShapes(activePage.shapes.map(s => s.id === sId ? { ...s, comments: [...(s.comments || []), { id: crypto.randomUUID(), userId: "me", username: "Author", text, timestamp: Date.now() }] } : s)); };
 
   if (isDashboard) {
     return (

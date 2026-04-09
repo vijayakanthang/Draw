@@ -3,6 +3,7 @@ import { UserIcon, ShieldIcon, CrownIcon } from "./Icons";
 
 interface UserPresence {
   id: string;
+  userId?: string;
   username: string;
   pageId: string;
   isOwner?: boolean;

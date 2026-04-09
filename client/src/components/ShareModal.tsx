@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ShareIcon, ShieldIcon } from "./Icons";
+import { UserIcon, ShieldIcon } from "./Icons";
 
 interface ShareModalProps {
   roomId: string;
