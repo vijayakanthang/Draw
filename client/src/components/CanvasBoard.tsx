@@ -1,7 +1,14 @@
-import React, { useRef, useState, useEffect, useMemo } from "react";
+import React, { useRef, useState, useEffect, useCallback } from "react";
 import rough from "roughjs";
 import type { Shape, Tool, Point } from "../types/shapes";
+import type { Socket } from "socket.io-client";
 import Minimap from "./Minimap";
+
+interface RemoteDrawing {
+  id: string;
+  username: string;
+  shape: Shape;
+}
 
 interface CanvasBoardProps {
   selectedTool: Tool;
@@ -11,11 +18,23 @@ interface CanvasBoardProps {
   isDark: boolean;
   selectedShapeId: string | null;
   onSelectShape: (id: string | null) => void;
-  socket: any; 
+  socket: Socket | null;
   remoteCursors: Record<string, { x: number; y: number; username: string }>;
+  remoteDrawings: Record<string, RemoteDrawing>;
   username: string;
   handDrawn: boolean;
   onTransformChange?: (pan: { x: number; y: number }, scale: number) => void;
+  onRequestTextInput?: (pos: { x: number; y: number; canvasX: number; canvasY: number }, isSticky: boolean) => void;
+}
+
+// Deterministic color from a string
+function hashColor(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash) % 360;
+  return `hsl(${hue}, 70%, 60%)`;
 }
 
 export default function CanvasBoard({
@@ -28,11 +47,14 @@ export default function CanvasBoard({
   onSelectShape,
   socket,
   remoteCursors,
+  remoteDrawings,
   username,
   handDrawn,
-  onTransformChange
+  onTransformChange,
+  onRequestTextInput,
 }: CanvasBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const rcRef = useRef<ReturnType<typeof rough.canvas> | null>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [scale, setScale] = useState(1);
   const [currentShape, setCurrentShape] = useState<Shape | null>(null);
@@ -42,66 +64,100 @@ export default function CanvasBoard({
     activeId?: string;
   }>({ type: "none" });
 
-  const rc = useMemo(() => {
-    if (canvasRef.current) return rough.canvas(canvasRef.current);
-    return null;
-  }, [canvasRef.current]);
+  // Create rough canvas after mount (fix: useMemo with ref doesn't work)
+  useEffect(() => {
+    if (canvasRef.current) {
+      rcRef.current = rough.canvas(canvasRef.current);
+    }
+  }, []);
 
-  const toCanvasPos = (e: React.MouseEvent | WheelEvent) => {
+  const toCanvasPos = useCallback((e: React.MouseEvent | MouseEvent | WheelEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
     return {
       x: (e.clientX - rect.left - pan.x) / scale,
       y: (e.clientY - rect.top - pan.y) / scale
     };
-  };
+  }, [pan, scale]);
+
+  const toScreenPos = useCallback((canvasX: number, canvasY: number) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    return {
+      x: canvasX * scale + pan.x + rect.left,
+      y: canvasY * scale + pan.y + rect.top
+    };
+  }, [pan, scale]);
 
   useEffect(() => { 
     render(); 
     if (onTransformChange) onTransformChange(pan, scale);
-  }, [shapes, currentShape, pan, scale, isDark, selectedShapeId, remoteCursors]);
+  }, [shapes, currentShape, pan, scale, isDark, selectedShapeId, remoteCursors, remoteDrawings]);
 
   const render = () => {
     const canvas = canvasRef.current; if (!canvas) return;
     const ctx = canvas.getContext("2d"); if (!ctx) return;
+    const rc = rcRef.current;
     ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.save();
     ctx.translate(pan.x, pan.y); ctx.scale(scale, scale);
-    drawGrid(ctx); shapes.forEach(s => drawShape(s, ctx));
-    if (currentShape) drawShape(currentShape, ctx);
-    if (selectedShapeId) { const s = shapes.find(sh => sh.id === selectedShapeId); if (s) drawSelection(s, ctx); }
-    ctx.restore(); drawCursors(ctx);
+    drawGrid(ctx); 
+    shapes.forEach(s => drawShape(s, ctx, rc));
+    if (currentShape) drawShape(currentShape, ctx, rc);
+    
+    // Draw remote in-progress shapes (ghosted)
+    Object.values(remoteDrawings).forEach(rd => {
+      ctx.globalAlpha = 0.4;
+      drawShape(rd.shape, ctx, rc);
+      ctx.globalAlpha = 1;
+    });
+
+    if (selectedShapeId) { 
+      const s = shapes.find(sh => sh.id === selectedShapeId); 
+      if (s) drawSelection(s, ctx); 
+    }
+    ctx.restore(); 
+    drawCursors(ctx);
   };
 
   const drawGrid = (ctx: CanvasRenderingContext2D) => {
-    const gridSize = 50; const opacity = isDark ? 0.05 : 0.1;
-    ctx.strokeStyle = isDark ? "#ffffff" : "#000000"; ctx.lineWidth = 0.5; ctx.globalAlpha = opacity;
-    const left = -pan.x / scale, top = -pan.y / scale, right = (ctx.canvas.width - pan.x) / scale, bottom = (ctx.canvas.height - pan.y) / scale;
+    const gridSize = 50;
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 0.5;
+    ctx.globalAlpha = 0.03;
+    const left = -pan.x / scale, top = -pan.y / scale;
+    const right = (ctx.canvas.width - pan.x) / scale;
+    const bottom = (ctx.canvas.height - pan.y) / scale;
     ctx.beginPath();
     for (let x = Math.floor(left / gridSize) * gridSize; x < right; x += gridSize) { ctx.moveTo(x, top); ctx.lineTo(x, bottom); }
     for (let y = Math.floor(top / gridSize) * gridSize; y < bottom; y += gridSize) { ctx.moveTo(left, y); ctx.lineTo(right, y); }
     ctx.stroke(); ctx.globalAlpha = 1;
   };
 
-  const drawShape = (s: Shape, ctx: CanvasRenderingContext2D) => {
+  const drawShape = (s: Shape, ctx: CanvasRenderingContext2D, rc: ReturnType<typeof rough.canvas> | null) => {
     if (!rc) return;
-    const options = { stroke: s.color || (isDark ? "#fff" : "#000"), strokeWidth: s.strokeWidth || 2, roughness: handDrawn ? (s.roughness ?? 1) : 0, bowing: handDrawn ? 1.5 : 0, seed: s.seed };
+    const options = { stroke: s.color || "#fff", strokeWidth: s.strokeWidth || 2, roughness: handDrawn ? (s.roughness ?? 1) : 0, bowing: handDrawn ? 1.5 : 0, seed: s.seed };
     switch (s.type) {
       case "rectangle": if (!s.start || !s.end) return; rc.rectangle(s.start.x, s.start.y, s.end.x - s.start.x, s.end.y - s.start.y, options); break;
-      case "circle": if (!s.start || !s.end) return; const r = Math.hypot(s.end.x - s.start.x, s.end.y - s.start.y); rc.circle(s.start.x, s.start.y, r * 2, options); break;
+      case "circle": if (!s.start || !s.end) return; { const r = Math.hypot(s.end.x - s.start.x, s.end.y - s.start.y); rc.circle(s.start.x, s.start.y, r * 2, options); } break;
       case "line": if (!s.start || !s.end) return; rc.line(s.start.x, s.start.y, s.end.x, s.end.y, options); break;
-      case "arrow": if (!s.start || !s.end) return; rc.line(s.start.x, s.start.y, s.end.x, s.end.y, options);
+      case "arrow": if (!s.start || !s.end) return; rc.line(s.start.x, s.start.y, s.end.x, s.end.y, options); {
         const angle = Math.atan2(s.end.y - s.start.y, s.end.x - s.start.x); const l = 15;
         rc.line(s.end.x, s.end.y, s.end.x - l * Math.cos(angle - Math.PI / 6), s.end.y - l * Math.sin(angle - Math.PI / 6), options);
-        rc.line(s.end.x, s.end.y, s.end.x - l * Math.cos(angle + Math.PI / 6), s.end.y - l * Math.sin(angle + Math.PI / 6), options); break;
+        rc.line(s.end.x, s.end.y, s.end.x - l * Math.cos(angle + Math.PI / 6), s.end.y - l * Math.sin(angle + Math.PI / 6), options); 
+      } break;
       case "pencil": if (s.path && s.path.length > 1) rc.linearPath(s.path.map(p => [p.x, p.y] as [number, number]), options); break;
-      case "text": ctx.fillStyle = s.color || (isDark ? "#fff" : "#000"); ctx.font = `20px Inter`; ctx.fillText(s.text || "", s.x || 0, s.y || 0); break;
-      case "sticky": const sx = s.x || 0, sy = s.y || 0; rc.rectangle(sx, sy, 150, 150, { ...options, fill: s.color || "#fbbf24", fillStyle: "solid", roughness: 0.5 });
-        ctx.fillStyle = "#000"; ctx.font = `14px Inter`; (s.text || "Sticky Note").split("\n").forEach((line, i) => ctx.fillText(line, sx + 10, sy + 25 + i * 20)); break;
+      case "text": ctx.fillStyle = s.color || "#fff"; ctx.font = `${s.fontSize || 20}px Inter, sans-serif`; ctx.fillText(s.text || "", s.x || 0, s.y || 0); break;
+      case "sticky": {
+        const sx = s.x || 0, sy = s.y || 0;
+        rc.rectangle(sx, sy, 150, 150, { ...options, fill: s.color || "#fbbf24", fillStyle: "solid", roughness: 0.5 });
+        ctx.fillStyle = "#1a1a2e"; ctx.font = "14px Inter, sans-serif";
+        (s.text || "Sticky Note").split("\n").forEach((line, i) => ctx.fillText(line, sx + 10, sy + 25 + i * 20));
+      } break;
     }
   };
 
   const drawSelection = (s: Shape, ctx: CanvasRenderingContext2D) => {
-    ctx.strokeStyle = "#4f46e5"; ctx.lineWidth = 1; ctx.setLineDash([5, 5]);
+    ctx.strokeStyle = "#6366f1"; ctx.lineWidth = 1.5 / scale; ctx.setLineDash([6 / scale, 4 / scale]);
     const b = getBounds(s); ctx.strokeRect(b.x - 5, b.y - 5, b.w + 10, b.h + 10); ctx.setLineDash([]);
   };
 
@@ -113,16 +169,40 @@ export default function CanvasBoard({
     }
     if (s.type === "sticky") return { x: s.x || 0, y: s.y || 0, w: 150, h: 150 };
     if (s.type === "text") return { x: s.x || 0, y: (s.y || 0) - 20, w: 100, h: 25 };
-    const x = Math.min(s.start!.x, s.end!.x); const y = Math.min(s.start!.y, s.end!.y);
-    const w = Math.abs(s.start!.x - s.end!.x); const h = Math.abs(s.start!.y - s.end!.y);
+    if (!s.start || !s.end) return { x: 0, y: 0, w: 0, h: 0 };
+    const x = Math.min(s.start.x, s.end.x); const y = Math.min(s.start.y, s.end.y);
+    const w = Math.abs(s.start.x - s.end.x); const h = Math.abs(s.start.y - s.end.y);
     return { x, y, w, h };
   };
 
   const drawCursors = (ctx: CanvasRenderingContext2D) => {
-    Object.entries(remoteCursors).forEach(([_id, pos]) => {
+    Object.entries(remoteCursors).forEach(([id, pos]) => {
+      const cursorColor = hashColor(pos.username || id);
       const screenX = pos.x * scale + pan.x, screenY = pos.y * scale + pan.y;
-      ctx.fillStyle = "#ff4757"; ctx.beginPath(); ctx.moveTo(screenX, screenY); ctx.lineTo(screenX + 15, screenY + 5); ctx.lineTo(screenX + 5, screenY + 15); ctx.fill();
-      ctx.font = "10px Inter"; ctx.fillText(pos.username || "Guest", screenX + 10, screenY + 25);
+      
+      // Cursor triangle
+      ctx.fillStyle = cursorColor;
+      ctx.beginPath(); 
+      ctx.moveTo(screenX, screenY); 
+      ctx.lineTo(screenX + 14, screenY + 5); 
+      ctx.lineTo(screenX + 5, screenY + 14); 
+      ctx.fill();
+      
+      // Name label
+      const label = pos.username || "Guest";
+      ctx.font = "bold 10px Inter, sans-serif";
+      const textWidth = ctx.measureText(label).width;
+      const labelX = screenX + 14, labelY = screenY + 22;
+      
+      // Label background
+      ctx.fillStyle = cursorColor;
+      ctx.beginPath();
+      ctx.roundRect(labelX - 2, labelY - 10, textWidth + 10, 16, 4);
+      ctx.fill();
+      
+      // Label text
+      ctx.fillStyle = "#fff";
+      ctx.fillText(label, labelX + 3, labelY + 2);
     });
   };
 
@@ -148,10 +228,14 @@ export default function CanvasBoard({
       onSelectShape(hit?.id || null); if (hit) setInteraction({ type: "move", activeId: hit.id, startPos: pos }); return;
     }
     if (selectedTool === "text" || selectedTool === "sticky") {
-       const value = prompt("Enter text", "");
-       if (value) { onShapesChange([...shapes, { id: crypto.randomUUID(), type: selectedTool, x: pos.x, y: pos.y, text: value, color: selectedTool === "sticky" ? "#fbbf24" : color, seed: Math.floor(Math.random() * 2**31) }]); } return;
+      // Use inline text input instead of prompt()
+      if (onRequestTextInput) {
+        const screen = toScreenPos(pos.x, pos.y);
+        onRequestTextInput({ x: screen.x, y: screen.y, canvasX: pos.x, canvasY: pos.y }, selectedTool === "sticky");
+      }
+      return;
     }
-    if (selectedTool !== "none" && (selectedTool as any) !== "comment") {
+    if (selectedTool !== "none" && selectedTool !== "comment") {
       const anchor = (selectedTool === "arrow" || selectedTool === "line") ? getAnchorPoint(pos) : null;
       setCurrentShape({ id: crypto.randomUUID(), type: selectedTool, start: anchor ? anchor.point : pos, end: pos, path: [pos], color, seed: Math.floor(Math.random() * 2**31), roughness: 1, anchoredStartId: anchor?.id });
       setInteraction({ type: "draw" });
@@ -159,16 +243,21 @@ export default function CanvasBoard({
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    const pos = toCanvasPos(e); socket?.emit("cursor-move", { x: pos.x, y: pos.y, username });
+    const pos = toCanvasPos(e); 
+    socket?.emit("cursor-move", { x: pos.x, y: pos.y, username });
+    
     if (interaction.type === "pan") {
       const dx = e.clientX - interaction.startPos!.x; const dy = e.clientY - interaction.startPos!.y;
       setPan(prev => ({ x: prev.x + dx, y: prev.y + dy })); setInteraction(prev => ({ ...prev, startPos: { x: e.clientX, y: e.clientY } })); return;
     }
     if (interaction.type === "draw" && currentShape) {
-       const anchor = (currentShape.type === "arrow" || currentShape.type === "line") ? getAnchorPoint(pos) : null;
-       const updated = { ...currentShape, end: anchor ? anchor.point : pos, anchoredEndId: anchor?.id };
-       if (currentShape.type === "pencil") updated.path = [...(currentShape.path || []), pos];
-       setCurrentShape(updated);
+      const anchor = (currentShape.type === "arrow" || currentShape.type === "line") ? getAnchorPoint(pos) : null;
+      const updated = { ...currentShape, end: anchor ? anchor.point : pos, anchoredEndId: anchor?.id };
+      if (currentShape.type === "pencil") updated.path = [...(currentShape.path || []), pos];
+      setCurrentShape(updated);
+      
+      // Broadcast drawing-in-progress to others
+      socket?.emit("drawing-in-progress", { shape: updated });
     }
     if (interaction.type === "move" && interaction.activeId) {
       const dx = pos.x - interaction.startPos!.x; const dy = pos.y - interaction.startPos!.y;
@@ -195,11 +284,12 @@ export default function CanvasBoard({
   const handleMouseUp = () => {
     if (interaction.type === "draw" && currentShape) {
       onShapesChange([...shapes, currentShape]);
+      socket?.emit("drawing-finished");
     }
     setCurrentShape(null); setInteraction({ type: "none" });
   };
 
-  const handleWheel = (e: WheelEvent) => {
+  const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
     if (e.ctrlKey) {
       const zoomSpeed = 0.001; const dScale = -e.deltaY * zoomSpeed; const newScale = Math.min(Math.max(scale + dScale, 0.1), 5);
@@ -209,13 +299,13 @@ export default function CanvasBoard({
         setScale(newScale); setPan({ x: mouseX - worldX * newScale, y: mouseY - worldY * newScale });
       }
     } else { setPan(prev => ({ x: prev.x - e.deltaX, y: prev.y - e.deltaY })); }
-  };
+  }, [pan, scale]);
 
   useEffect(() => {
     const canvas = canvasRef.current; if (!canvas) return;
     canvas.addEventListener("wheel", handleWheel, { passive: false });
     return () => canvas.removeEventListener("wheel", handleWheel);
-  }, [pan, scale]);
+  }, [handleWheel]);
 
   useEffect(() => {
     const updateSize = () => { if (canvasRef.current) { canvasRef.current.width = window.innerWidth; canvasRef.current.height = window.innerHeight; } };
@@ -225,8 +315,16 @@ export default function CanvasBoard({
 
   return (
     <div className="w-full h-full overflow-hidden bg-transparent">
-      <canvas ref={canvasRef} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} className="block touch-none" />
-      <Minimap shapes={shapes} pan={pan} scale={scale} isDark={isDark} canvasWidth={canvasRef.current?.width || window.innerWidth} canvasHeight={canvasRef.current?.height || window.innerHeight} />
+      <canvas 
+        ref={canvasRef} 
+        onMouseDown={handleMouseDown} 
+        onMouseMove={handleMouseMove} 
+        onMouseUp={handleMouseUp} 
+        onMouseLeave={handleMouseUp}
+        className="block touch-none" 
+        style={{ cursor: selectedTool === "none" ? "grab" : selectedTool === "select" ? "default" : "crosshair" }}
+      />
+      <Minimap shapes={shapes} pan={pan} scale={scale} canvasWidth={canvasRef.current?.width || window.innerWidth} canvasHeight={canvasRef.current?.height || window.innerHeight} />
     </div>
   );
 }
