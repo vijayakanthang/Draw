@@ -63,6 +63,41 @@
 
 ---
 
+## 🌍 Deployment
+
+### 1. Server (Backend) - Recommended: [Render](https://render.com)
+1. Create a **New Web Service** on Render.
+2. Connect your GitHub repository.
+3. **Build Command**: `cd server && npm install`
+4. **Start Command**: `cd server && node server.js`
+5. **Environment Variables**:
+    * `PORT`: 5000 (usually set automatically by Render)
+    * `CLIENT_ORIGIN`: Your Vercel frontend URL (e.g., `https://draw-app.vercel.app`)
+
+### 2. Client (Frontend) - Recommended: [Vercel](https://vercel.com)
+1. Create a **New Project** on Vercel.
+2. Select the `client` folder as the **Root Directory**.
+3. Vercel should auto-detect **Vite**.
+4. **Environment Variables**:
+    * `VITE_SOCKET_URL`: Your Render server URL (e.g., `https://draw-server.onrender.com`)
+
+---
+
+## ⚙️ Environment Variables
+
+### Backend (.env)
+```env
+PORT=5000
+CLIENT_ORIGIN=http://localhost:5173
+```
+
+### Frontend (.env)
+```env
+VITE_SOCKET_URL=http://localhost:5000
+```
+
+---
+
 ## ⌨️ Keyboard Shortcuts
 
 | Shortcut | Tool |

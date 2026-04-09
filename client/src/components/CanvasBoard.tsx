@@ -13,6 +13,7 @@ interface CanvasBoardProps {
   onSelectShape: (id: string | null) => void;
   socket: any; 
   remoteCursors: Record<string, { x: number; y: number; username: string }>;
+  username: string;
   handDrawn: boolean;
   onTransformChange?: (pan: { x: number; y: number }, scale: number) => void;
 }
@@ -27,6 +28,7 @@ export default function CanvasBoard({
   onSelectShape,
   socket,
   remoteCursors,
+  username,
   handDrawn,
   onTransformChange
 }: CanvasBoardProps) {
@@ -157,7 +159,7 @@ export default function CanvasBoard({
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    const pos = toCanvasPos(e); socket?.emit("cursor-move", { x: pos.x, y: pos.y });
+    const pos = toCanvasPos(e); socket?.emit("cursor-move", { x: pos.x, y: pos.y, username });
     if (interaction.type === "pan") {
       const dx = e.clientX - interaction.startPos!.x; const dy = e.clientY - interaction.startPos!.y;
       setPan(prev => ({ x: prev.x + dx, y: prev.y + dy })); setInteraction(prev => ({ ...prev, startPos: { x: e.clientX, y: e.clientY } })); return;

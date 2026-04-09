@@ -8,7 +8,7 @@ import PresenceAvatars from "./PresenceAvatars";
 import CommentOverlay from "./CommentOverlay";
 import type { Shape, Tool } from "../types/shapes";
 
-const socket = io("http://localhost:5000");
+const socket = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:5000");
 
 export default function Whiteboard() {
   const [selectedTool, setSelectedTool] = useState<Tool>("none");
@@ -34,18 +34,43 @@ export default function Whiteboard() {
   const [remoteCursors, setRemoteCursors] = useState<Record<string, { x: number; y: number; username: string }>>({});
   const [presence, setPresence] = useState<Record<string, { id: string; username: string; pageId: string }>>({});
 
+  // Room & Username Setup
+  const roomId = useMemo(() => {
+    let hash = window.location.hash.replace("#", "");
+    if (!hash) {
+      hash = `room-${crypto.randomUUID().split("-")[0]}`;
+      window.location.hash = hash;
+    }
+    return hash;
+  }, []);
+
+  const username = useMemo(() => {
+    const names = ["Designer", "Architect", "Artist", "Creator", "Thinker", "Builder"];
+    return `${names[Math.floor(Math.random() * names.length)]} ${Math.floor(Math.random() * 1000)}`;
+  }, []);
+
   const activePage = useMemo(() => pages.find((p) => p.id === activePageId) || pages[0], [pages, activePageId]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("mode") === "readonly") setIsReadOnly(true);
+
+    socket.emit("join-room", { roomId, username });
+
     socket.on("init", (data) => { if (data) { setPages(data.pages); setActivePageId(data.activePageId); } });
     socket.on("shapes-remote-update", (data) => { setPages(prev => prev.map(p => p.id === data.pageId ? { ...p, shapes: data.shapes } : p)); });
     socket.on("cursor-update", (data) => { setRemoteCursors(prev => ({ ...prev, [data.id]: { x: data.x, y: data.y, username: data.username } })); });
     socket.on("presence-update", (data) => { setPresence(prev => ({ ...prev, [data.id]: { id: data.id, username: data.username, pageId: data.pageId } })); });
     socket.on("user-disconnected", (id) => { setRemoteCursors(prev => { const n = { ...prev }; delete n[id]; return n; }); setPresence(prev => { const n = { ...prev }; delete n[id]; return n; }); });
-    return () => { socket.off("init"); socket.off("shapes-remote-update"); socket.off("cursor-update"); socket.off("presence-update"); socket.off("user-disconnected"); };
-  }, []);
+    
+    return () => { 
+      socket.off("init"); 
+      socket.off("shapes-remote-update"); 
+      socket.off("cursor-update"); 
+      socket.off("presence-update"); 
+      socket.off("user-disconnected"); 
+    };
+  }, [roomId, username]);
 
   useEffect(() => { socket.emit("page-view-change", { pageId: activePageId }); }, [activePageId]);
 
@@ -86,7 +111,12 @@ export default function Whiteboard() {
         onExportSVG={async () => (await import("../utils/export")).exportCanvasAsSVG(activePage.shapes, isDark)}
         isPresenting={isPresenting} onTogglePresentation={() => setIsPresenting(!isPresenting)}
         showLibrary={showLibrary} onToggleLibrary={() => setShowLibrary(!showLibrary)}
-        onShare={() => { const u = new URL(window.location.href); u.searchParams.set("mode", "readonly"); navigator.clipboard.writeText(u.toString()); alert("Link copied!"); }}
+        onShare={() => { 
+          const u = new URL(window.location.href); 
+          u.searchParams.set("mode", "readonly"); 
+          navigator.clipboard.writeText(u.toString()); 
+          alert(`Read-only link for ${roomId} copied to clipboard!`); 
+        }}
         showTimeline={showTimeline} onToggleTimeline={() => setShowTimeline(!showTimeline)}
       />
       )}
@@ -100,7 +130,7 @@ export default function Whiteboard() {
       <main className="flex-grow relative overflow-hidden bg-transparent">
         <CanvasBoard 
           selectedTool={selectedTool} color={color} shapes={activePage.shapes} onShapesChange={updateShapes} isDark={isDark} selectedShapeId={selectedShapeId} onSelectShape={setSelectedShapeId} 
-          socket={socket} remoteCursors={remoteCursors} handDrawn={handDrawn}
+          socket={socket} remoteCursors={remoteCursors} username={username} handDrawn={handDrawn}
           onTransformChange={(p, s) => { setPan(p); setScale(s); }}
         />
         
