@@ -194,17 +194,31 @@ input[type="range"]::-moz-range-thumb {
   .p-4 { padding: 0.75rem !important; }
   .gap-6 { gap: 0.75rem !important; }
   .text-4xl { font-size: 1.75rem !important; }
+
+  /* Vertical stacking utility */
+  .mobile-stack {
+    flex-direction: column !important;
+    gap: 1rem !important;
+    align-items: center !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+  }
 }
+
+/* Layering system */
+.z-modal { z-index: 100; }
+.z-overlay { z-index: 60; }
+.z-toolbar { z-index: 50; }
 
 /* Touch targets for accessibility */
 @media (pointer: coarse) {
   button, input, select {
-    min-height: 44px; /* Standard Apple/Android touch target */
+    min-height: 44px;
+    cursor: default;
   }
   
-  /* Make canvas elements interactive but prevent browser default interactions */
   canvas {
-    touch-action: none;
+    touch-action: none !important;
   }
 }
 

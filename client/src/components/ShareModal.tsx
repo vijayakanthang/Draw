@@ -47,7 +47,7 @@ export default function ShareModal({
       onClick={onClose}
     >
       <div 
-        className="w-full max-w-md glass-strong rounded-3xl shadow-2xl overflow-hidden animate-zoom-in"
+        className="w-full max-w-[90vw] md:max-w-md max-h-[90vh] overflow-y-auto custom-scrollbar glass-strong rounded-3xl shadow-2xl animate-zoom-in"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6 border-b border-white/6 flex items-center justify-between">

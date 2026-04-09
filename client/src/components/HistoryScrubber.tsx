@@ -10,7 +10,7 @@ export default function HistoryScrubber({ currentIndex, maxIndex, onScrub, isVis
   if (!isVisible || maxIndex <= 0) return null;
 
   return (
-    <div className="fixed bottom-16 left-1/2 -translate-x-1/2 w-96 px-6 py-4 glass-strong rounded-2xl shadow-2xl flex flex-col gap-3 animate-slide-up z-50">
+    <div className="fixed bottom-36 md:bottom-20 left-1/2 -translate-x-1/2 w-[90vw] md:w-96 px-6 py-4 glass-strong rounded-2xl shadow-2xl flex flex-col gap-3 animate-slide-up z-50">
       <div className="flex justify-between items-center px-1">
         <span className="text-[10px] font-bold text-white/30 uppercase tracking-[0.15em]">History Timeline</span>
         <span className="text-[10px] font-mono text-blue-400">{currentIndex + 1} / {maxIndex + 1}</span>
