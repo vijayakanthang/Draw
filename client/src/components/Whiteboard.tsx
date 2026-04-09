@@ -8,7 +8,7 @@ import PresenceAvatars from "./PresenceAvatars";
 import CommentOverlay from "./CommentOverlay";
 import type { Shape, Tool } from "../types/shapes";
 
-const socket = io(import.meta.env.SOCKET_URL || "http://localhost:5000");
+const socket = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:5000");
 
 export default function Whiteboard() {
   const [selectedTool, setSelectedTool] = useState<Tool>("none");
