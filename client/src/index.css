@@ -175,8 +175,8 @@ input[type="range"]::-moz-range-thumb {
 
   .glass-strong {
     backdrop-filter: blur(12px);
-    background: rgba(10, 14, 26, 0.96);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(10, 14, 26, 0.98);
+    border: 1px solid rgba(255, 255, 255, 0.1);
   }
 
   /* Sheet animation for mobile sidebar */
@@ -190,10 +190,19 @@ input[type="range"]::-moz-range-thumb {
 
   /* Compact spacing for small phones */
   .p-10 { padding: 1.25rem !important; }
-  .p-6 { padding: 1rem !important; }
-  .p-4 { padding: 0.75rem !important; }
-  .gap-6 { gap: 0.75rem !important; }
-  .text-4xl { font-size: 1.75rem !important; }
+  .p-6 { padding: 0.75rem !important; }
+  .p-4 { padding: 0.5rem !important; }
+  .gap-6 { gap: 0.5rem !important; }
+  .text-4xl { font-size: 1.5rem !important; }
+
+  /* Super-mobile enhancements (< 400px) */
+  @media (max-width: 400px) {
+    .p-6 { padding: 0.4rem !important; }
+    .text-sm { font-size: 0.8rem !important; }
+    .w-9.h-9 { width: 34px !important; height: 34px !important; }
+    .w-12.h-12 { width: 38px !important; height: 38px !important; }
+    .gap-2 { gap: 0.2rem !important; }
+  }
 
   /* Vertical stacking utility */
   .mobile-stack {

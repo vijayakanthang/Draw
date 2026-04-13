@@ -7,6 +7,7 @@ export type Tool =
   | "text"
   | "sticky"
   | "comment"
+  | "eraser"
   | "select"
   | "none";
 

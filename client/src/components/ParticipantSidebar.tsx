@@ -5,6 +5,7 @@ interface UserPresence {
   id: string;
   userId?: string;
   username: string;
+  userNumber?: number;
   pageId: string;
   isOwner?: boolean;
 }
@@ -170,7 +171,7 @@ export default function ParticipantSidebar({
                     
                     <div className="flex-grow min-w-0">
                       <div className="flex items-center gap-2 md:gap-1.5">
-                        <span className="text-sm md:text-[11px] font-bold text-white/85 truncate">{user.username}</span>
+                        <span className="text-sm md:text-[11px] font-bold text-white/85 truncate">{user.username} <span className="opacity-40 font-mono text-[0.8em]">(#{user.userNumber || "?"})</span></span>
                         {user.isOwner && <CrownIcon size={12} className="text-amber-500 flex-shrink-0" />}
                         {isMe && <span className="text-[10px] md:text-[8px] text-white/25 flex-shrink-0">(You)</span>}
                       </div>

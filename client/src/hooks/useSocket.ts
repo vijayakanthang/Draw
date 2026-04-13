@@ -7,9 +7,10 @@ interface UseSocketOptions {
   roomId: string | null;
   username: string;
   userId: string;
+  autoJoin?: boolean;
 }
 
-export function useSocket({ roomId, username, userId }: UseSocketOptions) {
+export function useSocket({ roomId, username, userId, autoJoin = true }: UseSocketOptions) {
   const socketRef = useRef<Socket | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
 
@@ -42,7 +43,9 @@ export function useSocket({ roomId, username, userId }: UseSocketOptions) {
     socket.on("connect", () => {
       setStatus("connected");
       // Join (or re-join) the room on every connect
-      socket.emit("join-room", { roomId, username, userId });
+      if (autoJoin) {
+        socket.emit("join-room", { roomId, username, userId });
+      }
     });
 
     socket.on("disconnect", () => {
@@ -68,7 +71,9 @@ export function useSocket({ roomId, username, userId }: UseSocketOptions) {
     // If socket is already connected (sync), join immediately
     if (socket.connected) {
       setStatus("connected");
-      socket.emit("join-room", { roomId, username, userId });
+      if (autoJoin) {
+        socket.emit("join-room", { roomId, username, userId });
+      }
     }
 
     return () => {
