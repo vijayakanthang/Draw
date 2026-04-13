@@ -9,6 +9,7 @@ import ShareModal from "./ShareModal";
 import ParticipantSidebar from "./ParticipantSidebar";
 import InlineTextInput from "./InlineTextInput";
 import { useSocket } from "../hooks/useSocket";
+import { UserIcon } from "./Icons";
 import type { Shape, Tool } from "../types/shapes";
 
 export default function Whiteboard() {
@@ -24,6 +25,10 @@ export default function Whiteboard() {
   const [showTimeline, setShowTimeline] = useState<boolean>(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isJoined, setIsJoined] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    return (localStorage.getItem("draw-theme") as "dark" | "light") || "dark";
+  });
   
   // Board Transform State
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -33,7 +38,7 @@ export default function Whiteboard() {
     { id: "page-1", name: "Main Board", shapes: [] },
   ]);
   const [activePageId, setActivePageId] = useState<string>("page-1");
-  const [remoteCursors, setRemoteCursors] = useState<Record<string, { x: number; y: number; username: string }>>({});
+  const [remoteCursors, setRemoteCursors] = useState<Record<string, { x: number; y: number; username: string; userNumber?: number }>>({});
   const [remoteDrawings, setRemoteDrawings] = useState<Record<string, { id: string; username: string; shape: Shape }>>({});
   const [presence, setPresence] = useState<Record<string, { id: string; username: string; pageId: string; userId?: string; isOwner?: boolean }>>({});
   const [isLocked, setIsLocked] = useState(false);
@@ -95,7 +100,13 @@ export default function Whiteboard() {
   }, []);
 
   // 4. Socket Management
-  const { getSocket, status: connectionStatus } = useSocket({ roomId, username, userId });
+  const { getSocket, status: connectionStatus } = useSocket({ roomId, username, userId, autoJoin: false });
+
+  const joinRoom = useCallback((name: string) => {
+    localStorage.setItem("draw-username", name);
+    getSocket()?.emit("join-room", { roomId, username: name, userId });
+    setIsJoined(true);
+  }, [roomId, userId, getSocket]);
 
   const isOwner = useMemo(() => {
     const me = Object.values(presence).find(u => u.userId === userId);
@@ -116,6 +127,12 @@ export default function Whiteboard() {
     window.location.hash = "";
     setRoomId(null);
     setWaitingStatus("none");
+  };
+
+  const toggleTheme = () => {
+    const newTheme = theme === "dark" ? "light" : "dark";
+    setTheme(newTheme);
+    localStorage.setItem("draw-theme", newTheme);
   };
 
   const handleSetAccessMode = (mode: "open" | "approval") => {
@@ -177,7 +194,7 @@ export default function Whiteboard() {
       
       socket.on("cursor-update", (data: any) => { 
         if (data && data.id) {
-          setRemoteCursors(prev => ({ ...prev, [data.id]: { x: data.x, y: data.y, username: data.username } })); 
+          setRemoteCursors(prev => ({ ...prev, [data.id]: { x: data.x, y: data.y, username: data.username, userNumber: data.userNumber } })); 
         }
       });
       
@@ -323,6 +340,7 @@ export default function Whiteboard() {
         case "t": setSelectedTool("text"); break;
         case "s": setSelectedTool("sticky"); break;
         case "c": setSelectedTool("comment"); break;
+        case "e": setSelectedTool("eraser"); break;
         case "h": setSelectedTool("none"); break;
         case "escape": setSelectedShapeId(null); setSelectedTool("none"); break;
         case "delete": case "backspace": 
@@ -426,7 +444,7 @@ export default function Whiteboard() {
   // --- Waiting for Approval Screen ---
   if (waitingStatus === "waiting") {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-[#0a0e1a] text-white">
+      <div className={`flex h-screen w-screen items-center justify-center ${theme === "dark" ? "bg-[#0a0e1a]" : "bg-slate-50"} text-white transition-colors duration-500`}>
         <div className="flex flex-col items-center gap-6 animate-fade-in max-w-sm text-center px-6">
           <div className="w-16 h-16 rounded-2xl bg-amber-500/15 flex items-center justify-center">
             <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin" />
@@ -455,7 +473,7 @@ export default function Whiteboard() {
   // --- Rejected / Kicked Screen ---
   if (waitingStatus === "rejected") {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-[#0a0e1a] text-white">
+      <div className={`flex h-screen w-screen items-center justify-center ${theme === "dark" ? "bg-[#0a0e1a]" : "bg-slate-50"} transition-colors duration-500`}>
         <div className="flex flex-col items-center gap-6 animate-fade-in max-w-sm text-center px-6">
           <div className="w-16 h-16 rounded-2xl bg-red-500/15 flex items-center justify-center text-red-400">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
@@ -480,7 +498,7 @@ export default function Whiteboard() {
   // --- Loading ---
   if (!activePage) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-[#0a0e1a] text-white">
+      <div className={`flex h-screen w-screen items-center justify-center ${theme === "dark" ? "bg-[#0a0e1a]" : "bg-slate-50"} transition-colors duration-500`}>
         <div className="flex flex-col items-center gap-4 animate-fade-in">
           <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
           <p className="text-sm font-medium text-white/40 animate-pulse">Syncing board state...</p>
@@ -491,7 +509,7 @@ export default function Whiteboard() {
 
   // --- Main Whiteboard ---
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#0a0e1a]">
+    <div className={`flex flex-col h-screen w-screen overflow-hidden ${theme === "dark" ? "bg-[#0a0e1a]" : "bg-slate-50"} transition-colors duration-500`}>
       {!isReadOnly && (
       <Toolbar
         selectedTool={selectedTool} onSelectTool={setSelectedTool}
@@ -508,6 +526,8 @@ export default function Whiteboard() {
         onGoHome={handleGoHome}
         connectionStatus={connectionStatus}
         isSidebarOpen={isSidebarOpen}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
       )}
 
@@ -542,9 +562,39 @@ export default function Whiteboard() {
         />
       </div>
 
+      {/* Join Screen Overlay */}
+      {!isJoined && roomId && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-[#0a0e1a]/80 backdrop-blur-md animate-fade-in p-4">
+          <div className="max-w-md w-full p-6 md:p-10 glass-strong rounded-[2.5rem] shadow-2xl text-center">
+            <div className="w-16 h-16 bg-blue-600 rounded-2xl mx-auto mb-6 flex items-center justify-center text-white shadow-xl shadow-blue-600/20">
+              <UserIcon />
+            </div>
+            <h2 className="text-2xl font-black text-white mb-2">Ready to join?</h2>
+            <p className="text-sm text-white/35 mb-8 font-medium">Enter your name to start collaborating on this board.</p>
+            
+            <form onSubmit={(e) => { e.preventDefault(); const name = (e.currentTarget.elements.namedItem("name") as HTMLInputElement).value; if (name.trim()) joinRoom(name.trim()); }} className="space-y-4">
+              <input
+                name="name"
+                type="text"
+                autoFocus
+                defaultValue={username}
+                placeholder="What's your name?"
+                className="w-full px-6 py-4 bg-white/5 border border-white/8 rounded-2xl text-white outline-none focus:border-blue-500/40 transition-all font-bold text-center"
+              />
+              <button
+                type="submit"
+                className="w-full py-4.5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl shadow-blue-600/20"
+              >
+                Join Board
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       <main className="flex-grow relative overflow-hidden bg-transparent">
         <CanvasBoard 
-          selectedTool={selectedTool} color={color} shapes={activePage.shapes} onShapesChange={updateShapes} isDark={true} selectedShapeId={selectedShapeId} onSelectShape={setSelectedShapeId} 
+          selectedTool={selectedTool} color={color} shapes={activePage.shapes} onShapesChange={updateShapes} isDark={theme === "dark"} selectedShapeId={selectedShapeId} onSelectShape={setSelectedShapeId} 
           socket={getSocket()} remoteCursors={remoteCursors} remoteDrawings={remoteDrawings} username={username} handDrawn={handDrawn}
           onTransformChange={(p, s) => { setPan(p); setScale(s); }}
           onRequestTextInput={handleTextInputRequest}

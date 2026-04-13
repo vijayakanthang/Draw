@@ -19,7 +19,7 @@ interface CanvasBoardProps {
   selectedShapeId: string | null;
   onSelectShape: (id: string | null) => void;
   socket: Socket | null;
-  remoteCursors: Record<string, { x: number; y: number; username: string }>;
+  remoteCursors: Record<string, { x: number; y: number; username: string; userNumber?: number }>;
   remoteDrawings: Record<string, RemoteDrawing>;
   username: string;
   handDrawn: boolean;
@@ -54,7 +54,9 @@ export default function CanvasBoard({
   onRequestTextInput,
 }: CanvasBoardProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const bufferRef = useRef<HTMLCanvasElement | null>(null);
   const rcRef = useRef<ReturnType<typeof rough.canvas> | null>(null);
+  const bufferRcRef = useRef<ReturnType<typeof rough.canvas> | null>(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [scale, setScale] = useState(1);
   const [currentShape, setCurrentShape] = useState<Shape | null>(null);
@@ -69,6 +71,10 @@ export default function CanvasBoard({
     if (canvasRef.current) {
       rcRef.current = rough.canvas(canvasRef.current);
     }
+    if (!bufferRef.current) {
+      bufferRef.current = document.createElement("canvas");
+    }
+    bufferRcRef.current = rough.canvas(bufferRef.current);
   }, []);
 
   const toCanvasPos = useCallback((e: React.PointerEvent | PointerEvent | React.MouseEvent | MouseEvent | WheelEvent) => {
@@ -97,20 +103,78 @@ export default function CanvasBoard({
   const render = () => {
     const canvas = canvasRef.current; if (!canvas) return;
     const ctx = canvas.getContext("2d"); if (!ctx) return;
-    const rc = rcRef.current;
-    ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.save();
+    const buffer = bufferRef.current; if (!buffer) return;
+    const bCtx = buffer.getContext("2d"); if (!bCtx) return;
+    const rc = bufferRcRef.current;
+    
+    // Ensure buffer matches main canvas size
+    if (buffer.width !== canvas.width || buffer.height !== canvas.height) {
+      buffer.width = canvas.width;
+      buffer.height = canvas.height;
+    }
+
+    // 1. Draw Grid on main canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height); 
+    ctx.save();
     ctx.translate(pan.x, pan.y); ctx.scale(scale, scale);
     drawGrid(ctx); 
-    shapes.forEach(s => drawShape(s, ctx, rc));
-    if (currentShape) drawShape(currentShape, ctx, rc);
+    ctx.restore();
+
+    // 2. Clear Buffer and Setup Transform
+    bCtx.clearRect(0, 0, buffer.width, buffer.height);
+    bCtx.save();
+    bCtx.translate(pan.x, pan.y); bCtx.scale(scale, scale);
+
+    // 3. Draw Shapes to Buffer
+    const normalShapes = shapes.filter(s => s.type !== "eraser");
+    const erasures = shapes.filter(s => s.type === "eraser");
+
+    normalShapes.forEach(s => drawShape(s, bCtx, rc));
+    if (currentShape && currentShape.type !== "eraser") drawShape(currentShape, bCtx, rc);
     
-    // Draw remote in-progress shapes (ghosted)
+    // Remote in-progress shapes
     Object.values(remoteDrawings).forEach(rd => {
-      ctx.globalAlpha = 0.4;
-      drawShape(rd.shape, ctx, rc);
-      ctx.globalAlpha = 1;
+      if (rd.shape.type !== "eraser") {
+        bCtx.globalAlpha = 0.4;
+        drawShape(rd.shape, bCtx, rc);
+        bCtx.globalAlpha = 1;
+      }
     });
 
+    // 4. Subtractive Erasing
+    bCtx.globalCompositeOperation = "destination-out";
+    const drawEraserStroke = (pts: Point[]) => {
+      if (pts.length < 2) return;
+      bCtx.beginPath();
+      bCtx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) bCtx.lineTo(pts[i].x, pts[i].y);
+      bCtx.lineWidth = 20; // Fixed eraser size
+      bCtx.lineCap = "round";
+      bCtx.lineJoin = "round";
+      bCtx.stroke();
+    };
+
+    erasures.forEach(e => { if (e.path) drawEraserStroke(e.path); });
+    if (currentShape && currentShape.type === "eraser" && currentShape.path) drawEraserStroke(currentShape.path);
+    
+    // Remote erasures
+    Object.values(remoteDrawings).forEach(rd => {
+      if (rd.shape.type === "eraser" && rd.shape.path) {
+        bCtx.globalAlpha = 0.4;
+        drawEraserStroke(rd.shape.path);
+        bCtx.globalAlpha = 1;
+      }
+    });
+
+    bCtx.globalCompositeOperation = "source-over";
+    bCtx.restore();
+
+    // 5. Composite Buffer to main canvas
+    ctx.drawImage(buffer, 0, 0);
+
+    // 6. UI Overlays (Selection, Cursors)
+    ctx.save();
+    ctx.translate(pan.x, pan.y); ctx.scale(scale, scale);
     if (selectedShapeId) { 
       const s = shapes.find(sh => sh.id === selectedShapeId); 
       if (s) drawSelection(s, ctx); 
@@ -121,9 +185,9 @@ export default function CanvasBoard({
 
   const drawGrid = (ctx: CanvasRenderingContext2D) => {
     const gridSize = 50;
-    ctx.strokeStyle = "#ffffff";
+    ctx.strokeStyle = isDark ? "#ffffff" : "#000000";
     ctx.lineWidth = 0.5;
-    ctx.globalAlpha = 0.03;
+    ctx.globalAlpha = isDark ? 0.03 : 0.05;
     const left = -pan.x / scale, top = -pan.y / scale;
     const right = (ctx.canvas.width - pan.x) / scale;
     const bottom = (ctx.canvas.height - pan.y) / scale;
@@ -189,7 +253,7 @@ export default function CanvasBoard({
       ctx.fill();
       
       // Name label
-      const label = pos.username || "Guest";
+      const label = `${pos.username || "Guest"} (#${pos.userNumber || "?"})`;
       ctx.font = "bold 10px Inter, sans-serif";
       const textWidth = ctx.measureText(label).width;
       const labelX = screenX + 14, labelY = screenY + 22;
@@ -240,6 +304,11 @@ export default function CanvasBoard({
       }
       return;
     }
+    if (selectedTool === "eraser") {
+      setCurrentShape({ id: crypto.randomUUID(), type: "eraser", path: [pos], color: "#000", seed: 0 });
+      setInteraction({ type: "draw" });
+      return;
+    }
     if (selectedTool !== "none" && selectedTool !== "comment") {
       const anchor = (selectedTool === "arrow" || selectedTool === "line") ? getAnchorPoint(pos) : null;
       setCurrentShape({ id: crypto.randomUUID(), type: selectedTool, start: anchor ? anchor.point : pos, end: pos, path: [pos], color, seed: Math.floor(Math.random() * 2**31), roughness: 1, anchoredStartId: anchor?.id });
@@ -252,27 +321,36 @@ export default function CanvasBoard({
     const pointers = { ...activePointers, [e.pointerId]: { x: e.clientX, y: e.clientY } };
     const pointerIds = Object.keys(pointers);
 
-    // Pinch-to-zoom
+    // Pinch-to-zoom & Two-finger Pan
     if (pointerIds.length === 2) {
       const p1 = pointers[Number(pointerIds[0])];
       const p2 = pointers[Number(pointerIds[1])];
       const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+      const centerX = (p1.x + p2.x) / 2;
+      const centerY = (p1.y + p2.y) / 2;
       
       if (lastPinchDistance.current !== null) {
         const delta = dist / lastPinchDistance.current;
-        const newScale = Math.min(Math.max(scale * delta, 0.1), 5);
+        const newScale = Math.min(Math.max(scale * delta, 0.1), 10);
         
-        // Zoom towards the center of the two fingers
-        const centerX = (p1.x + p2.x) / 2;
-        const centerY = (p1.y + p2.y) / 2;
         const rect = canvasRef.current?.getBoundingClientRect();
         if (rect) {
           const mouseX = centerX - rect.left, mouseY = centerY - rect.top;
           const worldX = (mouseX - pan.x) / scale, worldY = (mouseY - pan.y) / scale;
-          setPan({ x: mouseX - worldX * newScale, y: mouseY - worldY * newScale });
-          setScale(newScale);
+          
+          // Apply Zoom
+          if (Math.abs(1 - delta) > 0.001) {
+            setScale(newScale);
+            setPan({ x: mouseX - worldX * newScale, y: mouseY - worldY * newScale });
+          } else if (interaction.type === "pan") {
+            // Simultaneous pan if zooming is subtle
+            const dx = centerX - interaction.startPos!.x;
+            const dy = centerY - interaction.startPos!.y;
+            setPan(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+          }
         }
       }
+      setInteraction(prev => ({ ...prev, startPos: { x: centerX, y: centerY } }));
       lastPinchDistance.current = dist;
       return;
     } else {
@@ -285,6 +363,12 @@ export default function CanvasBoard({
     if (interaction.type === "pan") {
       const dx = e.clientX - interaction.startPos!.x; const dy = e.clientY - interaction.startPos!.y;
       setPan(prev => ({ x: prev.x + dx, y: prev.y + dy })); setInteraction(prev => ({ ...prev, startPos: { x: e.clientX, y: e.clientY } })); return;
+    }
+    if (interaction.type === "draw" && selectedTool === "eraser" && currentShape) {
+      const updated = { ...currentShape, path: [...(currentShape.path || []), pos] };
+      setCurrentShape(updated);
+      socket?.emit("drawing-in-progress", { shape: updated });
+      return;
     }
     if (interaction.type === "draw" && currentShape) {
       const anchor = (currentShape.type === "arrow" || currentShape.type === "line") ? getAnchorPoint(pos) : null;
@@ -332,14 +416,21 @@ export default function CanvasBoard({
 
   const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
+    const zoomSpeed = 0.002; 
     if (e.ctrlKey) {
-      const zoomSpeed = 0.001; const dScale = -e.deltaY * zoomSpeed; const newScale = Math.min(Math.max(scale + dScale, 0.1), 5);
+      // Pinch or Ctrl+Wheel
+      const dScale = 1 - e.deltaY * zoomSpeed;
+      const newScale = Math.min(Math.max(scale * dScale, 0.1), 10);
       const rect = canvasRef.current?.getBoundingClientRect();
       if (rect) {
-        const mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top; const worldX = (mouseX - pan.x) / scale, worldY = (mouseY - pan.y) / scale;
+        const mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top; 
+        const worldX = (mouseX - pan.x) / scale, worldY = (mouseY - pan.y) / scale;
         setScale(newScale); setPan({ x: mouseX - worldX * newScale, y: mouseY - worldY * newScale });
       }
-    } else { setPan(prev => ({ x: prev.x - e.deltaX, y: prev.y - e.deltaY })); }
+    } else { 
+      // Regular Pan
+      setPan(prev => ({ x: prev.x - e.deltaX, y: prev.y - e.deltaY })); 
+    }
   }, [pan, scale]);
 
   useEffect(() => {
@@ -355,7 +446,7 @@ export default function CanvasBoard({
   }, []);
 
   return (
-    <div className="w-full h-full overflow-hidden bg-transparent">
+    <div className="w-full h-full overflow-hidden bg-transparent touch-none overscroll-none">
       <canvas 
         ref={canvasRef} 
         onPointerDown={handlePointerDown} 
@@ -363,7 +454,7 @@ export default function CanvasBoard({
         onPointerUp={handlePointerUp} 
         onPointerLeave={handlePointerUp}
         className="block touch-none" 
-        style={{ cursor: selectedTool === "none" ? "grab" : selectedTool === "select" ? "default" : "crosshair" }}
+        style={{ cursor: selectedTool === "none" ? "grab" : selectedTool === "select" ? "default" : selectedTool === "eraser" ? "cell" : "crosshair" }}
       />
       <Minimap shapes={shapes} pan={pan} scale={scale} canvasWidth={canvasRef.current?.width || window.innerWidth} canvasHeight={canvasRef.current?.height || window.innerHeight} />
     </div>

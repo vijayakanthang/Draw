@@ -71,6 +71,7 @@ io.on("connection", (socket) => {
         participants: {},
         waitingRoom: {},          // { [socketId]: { userId, username, socketId } }
         approvedUsers: new Set(), // Set of userIds that have been approved (persists across reconnects)
+        nextUserNumber: 1,        // Room-level counter for numeric IDs
       };
       // Owner is always approved
       boards[roomId].approvedUsers.add(currentUserId);
@@ -143,6 +144,7 @@ io.on("connection", (socket) => {
       id: socket.id,
       userId: currentUserId,
       username,
+      userNumber: board.nextUserNumber++, // Assign and increment
       pageId: board.activePageId || "page-1",
       isOwner,
     };
