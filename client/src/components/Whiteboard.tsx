@@ -10,12 +10,16 @@ import ParticipantSidebar from "./ParticipantSidebar";
 import InlineTextInput from "./InlineTextInput";
 import { useSocket } from "../hooks/useSocket";
 import { UserIcon } from "./Icons";
-import type { Shape, Tool } from "../types/shapes";
+import FloatingShapeToolbar from "./FloatingShapeToolbar";
+import ContextMenu from "./ContextMenu";
+import AICommandPalette from "./AICommandPalette";
+import SearchPanel from "./SearchPanel";
+import type { Shape, Tool, FillStyle } from "../types/shapes.tsx";
 
 export default function Whiteboard() {
   const [selectedTool, setSelectedTool] = useState<Tool>("none");
   const [color, setColor] = useState<string>("#3b82f6");
-  const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
+  const [selectedShapeIds, setSelectedShapeIds] = useState<string[]>([]);
   const [handDrawn, setHandDrawn] = useState<boolean>(true);
   const [isPresenting, setIsPresenting] = useState<boolean>(false);
   const [history, setHistory] = useState<Shape[][]>([]);
@@ -29,6 +33,23 @@ export default function Whiteboard() {
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     return (localStorage.getItem("draw-theme") as "dark" | "light") || "dark";
   });
+  
+  // Tool properties
+  const [strokeWidth, setStrokeWidth] = useState<number>(3);
+  const [opacity, setOpacity] = useState<number>(1);
+  const [fontFamily, setFontFamily] = useState<string>("Inter, sans-serif");
+  const [eraserSize, setEraserSize] = useState<number>(20);
+  const [gridSnap, setGridSnap] = useState<boolean>(true);
+  const [fillColor, setFillColor] = useState<string>("");
+  const [fillStyle, setFillStyle] = useState<FillStyle>("hachure");
+  const [bold, setBold] = useState<boolean>(false);
+  const [italic, setItalic] = useState<boolean>(false);
+  const [underline, setUnderline] = useState<boolean>(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
+  const [showAI, setShowAI] = useState<boolean>(false);
+  const [showSearch, setShowSearch] = useState<boolean>(false);
+  const [roomName, setRoomName] = useState<string>("Untilted Board");
+  const [isSaving, setIsSaving] = useState<boolean>(false);
   
   // Board Transform State
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -165,115 +186,133 @@ export default function Whiteboard() {
     }
     setIsDashboard(false);
 
+    const socket = getSocket();
+    if (!socket) return;
+
     const params = new URLSearchParams(window.location.search);
     if (params.get("mode") === "readonly") setIsReadOnly(true);
 
-    const setupInterval = setInterval(() => {
-      const socket = getSocket();
-      if (!socket) return;
-      clearInterval(setupInterval);
-
-      // --- Standard board events ---
-      socket.on("init", (data: any) => { 
-        if (data) { 
-          setPages(data.pages || [{ id: "page-1", name: "Main Board", shapes: [] }]); 
-          setActivePageId(data.activePageId || "page-1"); 
-          setIsLocked(data.isLocked || false);
-          setAccessMode(data.accessMode || "open");
-          if (data.users) setPresence(data.users);
-          if (data.waitingRoom) setWaitingRoom(data.waitingRoom);
-          setWaitingStatus("none"); // We got init, so we're approved
-        } 
-      });
-
-      socket.on("shapes-remote-update", (data: any) => { 
-        if (data && data.pageId && Array.isArray(data.shapes)) {
-          setPages(prev => prev.map(p => p.id === data.pageId ? { ...p, shapes: data.shapes } : p)); 
-        }
-      });
-      
-      socket.on("cursor-update", (data: any) => { 
-        if (data && data.id) {
-          setRemoteCursors(prev => ({ ...prev, [data.id]: { x: data.x, y: data.y, username: data.username, userNumber: data.userNumber } })); 
-        }
-      });
-      
-      socket.on("participants-update", (data: any) => { 
-        if (data) setPresence(data);
-      });
-
-      socket.on("presence-update", (data: any) => { 
-        if (data && data.id) setPresence(prev => ({ ...prev, [data.id]: data })); 
-      });
-      
-      socket.on("room-lock-status", ({ locked }: { locked: boolean }) => setIsLocked(locked));
-      
-      socket.on("user-disconnected", (id: string) => { 
-        setRemoteCursors(prev => { const n = { ...prev }; delete n[id]; return n; }); 
-        setPresence(prev => { const n = { ...prev }; delete n[id]; return n; }); 
-        setRemoteDrawings(prev => { const n = { ...prev }; delete n[id]; return n; });
-      });
-
-      socket.on("page-remote-update", (data: any) => {
-        if (data && Array.isArray(data.pages)) {
-          setPages(data.pages);
-        }
-      });
-
-      // Live drawing sync
-      socket.on("remote-drawing-in-progress", (data: any) => {
-        if (data && data.id && data.shape) {
-          setRemoteDrawings(prev => ({ ...prev, [data.id]: data }));
-        }
-      });
-
-      socket.on("remote-drawing-finished", (data: any) => {
-        if (data && data.id) {
-          setRemoteDrawings(prev => { const n = { ...prev }; delete n[data.id]; return n; });
-        }
-      });
-
-      // --- Access Control Events ---
-      socket.on("waiting-for-approval", () => {
-        setWaitingStatus("waiting");
-      });
-
-      socket.on("approved", () => {
+    const onInit = (data: any) => { 
+      if (data) { 
+        setPages(data.pages || [{ id: "page-1", name: "Main Board", shapes: [] }]); 
+        setActivePageId(data.activePageId || "page-1"); 
+        setIsLocked(data.isLocked || false);
+        setAccessMode(data.accessMode || "open");
+        setRoomName(data.name || "Untitled Board");
+        if (data.users) setPresence(data.users);
+        if (data.waitingRoom) setWaitingRoom(data.waitingRoom);
         setWaitingStatus("none");
-        // Re-join to get full state
+      } 
+    };
+
+    const onShapesRemoteUpdate = (data: any) => { 
+      if (data && data.pageId && Array.isArray(data.shapes)) {
+        setPages(prev => prev.map(p => p.id === data.pageId ? { ...p, shapes: data.shapes } : p)); 
+      }
+    };
+    
+    const onCursorUpdate = (data: any) => { 
+      if (data && data.id) {
+        setRemoteCursors(prev => ({ ...prev, [data.id]: { x: data.x, y: data.y, username: data.username, userNumber: data.userNumber } })); 
+      }
+    };
+    
+    const onParticipantsUpdate = (data: any) => { 
+      if (data) setPresence(data);
+    };
+
+    const onPresenceUpdate = (data: any) => { 
+      if (data && data.id) setPresence(prev => ({ ...prev, [data.id]: data })); 
+    };
+    
+    const onRoomLockStatus = ({ locked }: { locked: boolean }) => setIsLocked(locked);
+    const onRoomRenameUpdate = ({ name }: { name: string }) => setRoomName(name);
+    
+    const onUserDisconnected = (id: string) => { 
+      setRemoteCursors(prev => { const n = { ...prev }; delete n[id]; return n; }); 
+      setPresence(prev => { const n = { ...prev }; delete n[id]; return n; }); 
+      setRemoteDrawings(prev => { const n = { ...prev }; delete n[id]; return n; });
+    };
+
+    const onPageRemoteUpdate = (data: any) => {
+      if (data && Array.isArray(data.pages)) {
+        setPages(data.pages);
+      }
+    };
+
+    const onRemoteDrawingInProgress = (data: any) => {
+      if (data && data.id && data.shape) {
+        setRemoteDrawings(prev => ({ ...prev, [data.id]: data }));
+      }
+    };
+
+    const onRemoteDrawingFinished = (data: any) => {
+      if (data && data.id) {
+        setRemoteDrawings(prev => { const n = { ...prev }; delete n[data.id]; return n; });
+      }
+    };
+
+    const onWaitingForApproval = () => setWaitingStatus("waiting");
+
+    const onApproved = () => {
+      setWaitingStatus("none");
+      socket.emit("join-room", { roomId, username, userId });
+    };
+
+    const onRejected = ({ message }: { message: string }) => {
+      setWaitingStatus("rejected");
+      setRejectedMessage(message);
+    };
+
+    const onKicked = ({ message }: { message: string }) => {
+      setWaitingStatus("rejected");
+      setRejectedMessage(message);
+    };
+
+    const onAccessModeUpdate = ({ mode }: { mode: "open" | "approval" }) => setAccessMode(mode);
+
+    const onWaitingRoomUpdate = (data: any) => {
+      if (Array.isArray(data)) setWaitingRoom(data);
+    };
+
+    const onJoinRequest = (data: any) => {
+      if (data && data.username) {
+        setWaitingRoom(prev => {
+          if (prev.find(w => w.socketId === data.socketId)) return prev;
+          return [...prev, data];
+        });
+      }
+    };
+
+    // Register all listeners
+    socket.on("init", onInit);
+    socket.on("shapes-remote-update", onShapesRemoteUpdate);
+    socket.on("cursor-update", onCursorUpdate);
+    socket.on("participants-update", onParticipantsUpdate);
+    socket.on("presence-update", onPresenceUpdate);
+    socket.on("room-lock-status", onRoomLockStatus);
+    socket.on("user-disconnected", onUserDisconnected);
+    socket.on("page-remote-update", onPageRemoteUpdate);
+    socket.on("remote-drawing-in-progress", onRemoteDrawingInProgress);
+    socket.on("remote-drawing-finished", onRemoteDrawingFinished);
+    socket.on("waiting-for-approval", onWaitingForApproval);
+    socket.on("approved", onApproved);
+    socket.on("rejected", onRejected);
+    socket.on("kicked", onKicked);
+    socket.on("access-mode-update", onAccessModeUpdate);
+    socket.on("waiting-room-update", onWaitingRoomUpdate);
+    socket.on("join-request", onJoinRequest);
+    socket.on("room-rename-update", onRoomRenameUpdate);
+
+    // Initial Join
+    if (socket.connected) {
+      socket.emit("join-room", { roomId, username, userId });
+    } else {
+      socket.once("connect", () => {
         socket.emit("join-room", { roomId, username, userId });
       });
+    }
 
-      socket.on("rejected", ({ message }: { message: string }) => {
-        setWaitingStatus("rejected");
-        setRejectedMessage(message);
-      });
-
-      socket.on("kicked", ({ message }: { message: string }) => {
-        setWaitingStatus("rejected");
-        setRejectedMessage(message);
-      });
-
-      socket.on("access-mode-update", ({ mode }: { mode: "open" | "approval" }) => {
-        setAccessMode(mode);
-      });
-
-      socket.on("waiting-room-update", (data: any) => {
-        if (Array.isArray(data)) setWaitingRoom(data);
-      });
-
-      socket.on("join-request", (data: any) => {
-        // This triggers a waiting room update which we handle above
-        // But we can also show a notification
-        if (data && data.username) {
-          setWaitingRoom(prev => {
-            if (prev.find(w => w.socketId === data.socketId)) return prev;
-            return [...prev, data];
-          });
-        }
-      });
-    }, 100);
-    
     // Track Recent Rooms
     const recent = JSON.parse(localStorage.getItem("draw-recent-rooms") || "[]");
     if (!recent.includes(roomId)) {
@@ -281,27 +320,25 @@ export default function Whiteboard() {
     }
 
     return () => { 
-      clearInterval(setupInterval);
-      const socket = getSocket();
-      if (socket) {
-        socket.off("init"); 
-        socket.off("shapes-remote-update"); 
-        socket.off("cursor-update"); 
-        socket.off("participants-update");
-        socket.off("presence-update"); 
-        socket.off("user-disconnected"); 
-        socket.off("room-lock-status");
-        socket.off("page-remote-update");
-        socket.off("remote-drawing-in-progress");
-        socket.off("remote-drawing-finished");
-        socket.off("waiting-for-approval");
-        socket.off("approved");
-        socket.off("rejected");
-        socket.off("kicked");
-        socket.off("access-mode-update");
-        socket.off("waiting-room-update");
-        socket.off("join-request");
-      }
+      socket.off("init", onInit); 
+      socket.off("shapes-remote-update", onShapesRemoteUpdate); 
+      socket.off("cursor-update", onCursorUpdate); 
+      socket.off("participants-update", onParticipantsUpdate);
+      socket.off("presence-update", onPresenceUpdate); 
+      socket.off("room-lock-status", onRoomLockStatus);
+      socket.off("user-disconnected", onUserDisconnected); 
+      socket.off("page-remote-update", onPageRemoteUpdate);
+      socket.off("remote-drawing-in-progress", onRemoteDrawingInProgress);
+      socket.off("remote-drawing-finished", onRemoteDrawingFinished);
+      socket.off("waiting-for-approval", onWaitingForApproval);
+      socket.off("approved", onApproved);
+      socket.off("rejected", onRejected);
+      socket.off("kicked", onKicked);
+      socket.off("access-mode-update", onAccessModeUpdate);
+      socket.off("waiting-room-update", onWaitingRoomUpdate);
+      socket.off("join-request", onJoinRequest);
+      socket.off("room-rename-update", onRoomRenameUpdate);
+
       setRemoteCursors({});
       setPresence({});
       setRemoteDrawings({});
@@ -342,21 +379,48 @@ export default function Whiteboard() {
         case "c": setSelectedTool("comment"); break;
         case "e": setSelectedTool("eraser"); break;
         case "h": setSelectedTool("none"); break;
-        case "escape": setSelectedShapeId(null); setSelectedTool("none"); break;
+        case "escape": setSelectedShapeIds([]); setSelectedTool("none"); setShowSearch(false); break;
+        case "f": 
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            setShowSearch(true);
+          }
+          break;
+        case "arrowup": case "arrowdown": case "arrowleft": case "arrowright":
+          if (selectedShapeIds.length > 0 && activePage) {
+            e.preventDefault();
+            const nudge = e.shiftKey ? 10 : 1;
+            const dx = e.key.toLowerCase() === "arrowleft" ? -nudge : e.key.toLowerCase() === "arrowright" ? nudge : 0;
+            const dy = e.key.toLowerCase() === "arrowup" ? -nudge : e.key.toLowerCase() === "arrowdown" ? nudge : 0;
+            updateShapes(activePage.shapes.map(s => {
+              if (!selectedShapeIds.includes(s.id) || s.isLocked) return s;
+              if (s.type === "pencil") return { ...s, path: s.path?.map(p => ({ x: p.x + dx, y: p.y + dy })) };
+              if (s.type === "sticky" || s.type === "text") return { ...s, x: (s.x || 0) + dx, y: (s.y || 0) + dy };
+              return { ...s, start: s.start ? { x: s.start.x + dx, y: s.start.y + dy } : undefined, end: s.end ? { x: s.end.x + dx, y: s.end.y + dy } : undefined };
+            }));
+          }
+          break;
         case "delete": case "backspace": 
-          if (selectedShapeId && activePage) { 
-            updateShapes(activePage.shapes.filter(s => s.id !== selectedShapeId)); 
-            setSelectedShapeId(null); 
+          if (selectedShapeIds.length > 0 && activePage) { 
+            const deletableIds = selectedShapeIds.filter(id => !activePage.shapes.find(s => s.id === id)?.isLocked);
+            if (deletableIds.length > 0) {
+              updateShapes(activePage.shapes.filter(s => !deletableIds.includes(s.id))); 
+              setSelectedShapeIds(selectedShapeIds.filter(id => !deletableIds.includes(id))); 
+            }
           } break;
       }
     };
     window.addEventListener("keydown", handleKeyDown); 
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [historyIndex, selectedShapeId, activePage?.shapes, selectedTool, isPresenting, pages, activePageId, textInput]);
+  }, [historyIndex, selectedShapeIds, activePage?.shapes, selectedTool, isPresenting, pages, activePageId, textInput]);
 
   const updateShapes = useCallback((newShapes: Shape[], pushToHistory = true) => {
     setPages((prev) => prev.map((p) => (p.id === activePageId ? { ...p, shapes: newShapes } : p)));
     getSocket()?.emit("shapes-change", { pageId: activePageId, shapes: newShapes });
+    
+    setIsSaving(true);
+    const timer = setTimeout(() => setIsSaving(false), 2000);
+
     if (pushToHistory) { 
       setHistory(prev => {
         const h = prev.slice(0, historyIndex + 1);
@@ -366,6 +430,7 @@ export default function Whiteboard() {
       });
       setHistoryIndex(prev => prev + 1);
     }
+    return () => clearTimeout(timer);
   }, [activePageId, historyIndex, getSocket]);
 
   const handleUndo = () => { 
@@ -402,6 +467,80 @@ export default function Whiteboard() {
     if (activePage) updateShapes(activePage.shapes.map(s => s.id === sId ? { ...s, comments: [...(s.comments || []), { id: crypto.randomUUID(), userId, username, text, timestamp: Date.now() }] } : s)); 
   };
 
+  const handleDuplicateShapes = useCallback(() => {
+    if (!activePage || selectedShapeIds.length === 0) return;
+    const toDuplicate = activePage.shapes.filter(s => selectedShapeIds.includes(s.id));
+    const offset = 20;
+    const newShapes = toDuplicate.map(s => {
+        const id = crypto.randomUUID();
+        if (s.type === "pencil") return { ...s, id, path: s.path?.map(p => ({ x: p.x + offset, y: p.y + offset })) };
+        if (s.type === "sticky" || s.type === "text") return { ...s, id, x: (s.x || 0) + offset, y: (s.y || 0) + offset };
+        return { ...s, id, start: s.start ? { x: s.start.x + offset, y: s.start.y + offset } : undefined, end: s.end ? { x: s.end.x + offset, y: s.end.y + offset } : undefined };
+    });
+    updateShapes([...activePage.shapes, ...newShapes]);
+    setSelectedShapeIds(newShapes.map(s => s.id));
+  }, [activePage, selectedShapeIds, updateShapes]);
+
+  const handleToggleLockShapes = useCallback(() => {
+    if (!activePage || selectedShapeIds.length === 0) return;
+    const anyLocked = activePage.shapes.some(s => selectedShapeIds.includes(s.id) && s.isLocked);
+    updateShapes(activePage.shapes.map(s => selectedShapeIds.includes(s.id) ? { ...s, isLocked: !anyLocked } : s));
+  }, [activePage, selectedShapeIds, updateShapes]);
+
+  const handleBringToFront = useCallback(() => {
+    if (!activePage || selectedShapeIds.length === 0) return;
+    const selected = activePage.shapes.filter(s => selectedShapeIds.includes(s.id));
+    const unselected = activePage.shapes.filter(s => !selectedShapeIds.includes(s.id));
+    updateShapes([...unselected, ...selected]);
+  }, [activePage, selectedShapeIds, updateShapes]);
+
+  const handleSendToBack = useCallback(() => {
+    if (!activePage || selectedShapeIds.length === 0) return;
+    const selected = activePage.shapes.filter(s => selectedShapeIds.includes(s.id));
+    const unselected = activePage.shapes.filter(s => !selectedShapeIds.includes(s.id));
+    updateShapes([...selected, ...unselected]);
+  }, [activePage, selectedShapeIds, updateShapes]);
+
+  const onContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleRename = (name: string) => {
+    setRoomName(name);
+    const socket = getSocket();
+    if (socket) socket.emit("room-rename", { name });
+  };
+
+  const handleSelectAndJumpToShape = useCallback((id: string) => {
+    if (!activePage) return;
+    const s = activePage.shapes.find(sh => sh.id === id);
+    if (!s) return;
+    
+    setSelectedShapeIds([id]);
+    setSelectedTool("select");
+
+    // Calculate center of shape
+    let cx = 0, cy = 0;
+    if (s.type === "pencil" && s.path) {
+        cx = s.path[0].x; cy = s.path[0].y;
+    } else if (s.type === "sticky" || s.type === "text") {
+        cx = (s.x || 0) + 75; cy = (s.y || 0) + 75;
+    } else if (s.start && s.end) {
+        cx = (s.start.x + s.end.x) / 2; cy = (s.start.y + s.end.y) / 2;
+    }
+
+    // Smooth pan to shape
+    const newScale = 1;
+    const newPan = {
+        x: window.innerWidth / 2 - cx * newScale,
+        y: window.innerHeight / 2 - cy * newScale
+    };
+    setPan(newPan);
+    setScale(newScale);
+    setShowSearch(false);
+  }, [activePage]);
+
   const handleTextInputRequest = (pos: { x: number; y: number; canvasX: number; canvasY: number }, isSticky: boolean) => {
     setTextInput({ visible: true, ...pos, isSticky });
   };
@@ -415,6 +554,12 @@ export default function Whiteboard() {
       y: textInput.canvasY,
       text,
       color: textInput.isSticky ? "#fbbf24" : color,
+      strokeWidth: textInput.isSticky ? 1 : strokeWidth,
+      opacity,
+      fontFamily,
+      bold,
+      italic,
+      underline,
       seed: Math.floor(Math.random() * 2 ** 31),
     };
     updateShapes([...activePage.shapes, newShape]);
@@ -516,7 +661,7 @@ export default function Whiteboard() {
         color={color} setColor={setColor} pages={pages} activePageId={activePageId} onCreatePage={handleCreatePage} onSelectPage={setActivePageId}
         handDrawn={handDrawn} onToggleHandDrawn={setHandDrawn}
         canUndo={historyIndex > 0} canRedo={historyIndex < history.length - 1} onUndo={handleUndo} onRedo={handleRedo}
-        canDelete={!!selectedShapeId} onDelete={() => { if (selectedShapeId) { updateShapes(activePage.shapes.filter(s => s.id !== selectedShapeId)); setSelectedShapeId(null); } }}
+        canDelete={selectedShapeIds.length > 0} onDelete={() => { if (selectedShapeIds.length > 0) { updateShapes(activePage.shapes.filter(s => !selectedShapeIds.includes(s.id))); setSelectedShapeIds([]); } }}
         onExportPNG={async () => { const c = document.querySelector("canvas"); if (c) (await import("../utils/export")).exportCanvasAsPNG(c); }}
         onExportSVG={async () => (await import("../utils/export")).exportCanvasAsSVG(activePage.shapes)}
         isPresenting={isPresenting} onTogglePresentation={() => setIsPresenting(!isPresenting)}
@@ -528,6 +673,56 @@ export default function Whiteboard() {
         isSidebarOpen={isSidebarOpen}
         theme={theme}
         onToggleTheme={toggleTheme}
+        strokeWidth={strokeWidth}
+        setStrokeWidth={setStrokeWidth}
+        opacity={opacity}
+        setOpacity={setOpacity}
+        fontFamily={fontFamily}
+        setFontFamily={setFontFamily}
+        eraserSize={eraserSize}
+        setEraserSize={setEraserSize}
+        gridSnap={gridSnap}
+        setGridSnap={setGridSnap}
+        fillColor={fillColor}
+        setFillColor={(c) => {
+            setFillColor(c);
+            if (selectedShapeIds.length > 0 && activePage) {
+                updateShapes(activePage.shapes.map(s => selectedShapeIds.includes(s.id) ? { ...s, fillColor: c } : s));
+            }
+        }}
+        setFillStyle={(s) => {
+            setFillStyle(s);
+            if (selectedShapeIds.length > 0 && activePage) {
+                updateShapes(activePage.shapes.map(item => selectedShapeIds.includes(item.id) ? { ...item, fillStyle: s as any } : item));
+            }
+        }}
+        bold={bold}
+        setBold={(v) => {
+            setBold(v);
+            if (selectedShapeIds.length > 0 && activePage) {
+                updateShapes(activePage.shapes.map(item => selectedShapeIds.includes(item.id) ? { ...item, bold: v } : item));
+            }
+        }}
+        italic={italic}
+        setItalic={(v) => {
+            setItalic(v);
+            if (selectedShapeIds.length > 0 && activePage) {
+                updateShapes(activePage.shapes.map(item => selectedShapeIds.includes(item.id) ? { ...item, italic: v } : item));
+            }
+        }}
+        underline={underline}
+        setUnderline={(v) => {
+            setUnderline(v);
+            if (selectedShapeIds.length > 0 && activePage) {
+                updateShapes(activePage.shapes.map(item => selectedShapeIds.includes(item.id) ? { ...item, underline: v } : item));
+            }
+        }}
+        onToggleAI={() => setShowAI(!showAI)}
+        onToggleSearch={() => setShowSearch(!showSearch)}
+        roomName={roomName}
+        onRename={handleRename}
+        isSaving={isSaving}
+        fillStyle={fillStyle}
       />
       )}
 
@@ -542,7 +737,7 @@ export default function Whiteboard() {
         onSetAccessMode={handleSetAccessMode}
       />
 
-      <ComponentLibrary isVisible={showLibrary && !isPresenting} onClose={() => setShowLibrary(false)} onAddShape={(s) => updateShapes([...activePage.shapes, s])} selectedShape={activePage.shapes.find(s => s.id === selectedShapeId) || null} />
+      <ComponentLibrary isVisible={showLibrary && !isPresenting} onClose={() => setShowLibrary(false)} onAddShape={(s) => updateShapes([...activePage.shapes, s])} selectedShape={activePage.shapes.find(s => s.id === selectedShapeIds[0]) || null} />
       
       <div className={`transition-opacity duration-300 z-[60] ${isPresenting ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
         <ParticipantSidebar 
@@ -592,12 +787,55 @@ export default function Whiteboard() {
         </div>
       )}
 
-      <main className="flex-grow relative overflow-hidden bg-transparent">
+      <main className="flex-grow relative overflow-hidden bg-transparent" onContextMenu={onContextMenu}>
         <CanvasBoard 
-          selectedTool={selectedTool} color={color} shapes={activePage.shapes} onShapesChange={updateShapes} isDark={theme === "dark"} selectedShapeId={selectedShapeId} onSelectShape={setSelectedShapeId} 
+          selectedTool={selectedTool} color={color} shapes={activePage.shapes} onShapesChange={updateShapes} isDark={theme === "dark"} selectedShapeIds={selectedShapeIds} onSelectShapes={setSelectedShapeIds} 
           socket={getSocket()} remoteCursors={remoteCursors} remoteDrawings={remoteDrawings} username={username} handDrawn={handDrawn}
           onTransformChange={(p, s) => { setPan(p); setScale(s); }}
           onRequestTextInput={handleTextInputRequest}
+          activeProperties={{ strokeWidth, opacity, fontFamily, eraserSize, gridSnap, fillColor, fillStyle, bold, italic, underline }}
+        />
+        
+        <FloatingShapeToolbar 
+          selectedShapes={activePage.shapes.filter(s => selectedShapeIds.includes(s.id))}
+          onDelete={() => { updateShapes(activePage.shapes.filter(s => !selectedShapeIds.includes(s.id))); setSelectedShapeIds([]); }}
+          onToggleLock={handleToggleLockShapes}
+          onDuplicate={handleDuplicateShapes}
+          isDark={theme === "dark"}
+          scale={scale}
+          pan={pan}
+        />
+
+        {contextMenu && (
+          <ContextMenu 
+            x={contextMenu.x} y={contextMenu.y} 
+            onClose={() => setContextMenu(null)}
+            onBringToFront={handleBringToFront}
+            onSendToBack={handleSendToBack}
+            onDuplicate={handleDuplicateShapes}
+            onLock={handleToggleLockShapes}
+            onDelete={() => { updateShapes(activePage.shapes.filter(s => !selectedShapeIds.includes(s.id))); setSelectedShapeIds([]); }}
+            isLocked={activePage.shapes.some(s => selectedShapeIds.includes(s.id) && s.isLocked)}
+            hasSelection={selectedShapeIds.length > 0}
+            isDark={theme === "dark"}
+          />
+        )}
+
+        <AICommandPalette 
+          isVisible={showAI} 
+          onClose={() => setShowAI(false)} 
+          onGenerate={(newShapes) => {
+            updateShapes([...activePage.shapes, ...newShapes]);
+          }}
+          isDark={theme === "dark"}
+        />
+
+        <SearchPanel 
+          isVisible={showSearch} 
+          onClose={() => setShowSearch(false)} 
+          shapes={activePage.shapes} 
+          onSelectShape={handleSelectAndJumpToShape} 
+          isDark={theme === "dark"} 
         />
         
         {/* Comment Overlays */}
