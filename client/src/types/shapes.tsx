@@ -9,6 +9,8 @@ export type Tool =
   | "comment"
   | "eraser"
   | "select"
+  | "image"
+  | "laser"
   | "none";
 
 export interface Point {
@@ -24,6 +26,8 @@ export interface Comment {
   timestamp: number;
 }
 
+export type FillStyle = "solid" | "hachure" | "zigzag" | "cross-hatch" | "dots" | "sunburst" | "dashed" | "zigzag-line";
+
 export interface Shape {
   id: string;
   type: Tool;
@@ -37,8 +41,13 @@ export interface Shape {
   x?: number;
   y?: number;
   color?: string;
+  fillColor?: string;
+  fillStyle?: FillStyle;
   fontSize?: number;
   fontFamily?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
   seed: number;
   strokeWidth?: number;
   opacity?: number;
@@ -47,4 +56,6 @@ export interface Shape {
   anchoredStartId?: string;
   anchoredEndId?: string;
   audioUrl?: string;
+  imageUrl?: string;
+  isLocked?: boolean;
 }

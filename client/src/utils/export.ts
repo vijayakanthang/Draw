@@ -45,6 +45,18 @@ export const exportCanvasAsSVG = (shapes: Shape[]) => {
         const l = 15;
         svg.appendChild(rc.line(s.end.x, s.end.y, s.end.x - l * Math.cos(angle - Math.PI / 6), s.end.y - l * Math.sin(angle - Math.PI / 6), options));
         svg.appendChild(rc.line(s.end.x, s.end.y, s.end.x - l * Math.cos(angle + Math.PI / 6), s.end.y - l * Math.sin(angle + Math.PI / 6), options));
+      } else if (s.type === "image" && s.start && s.end && s.imageUrl) {
+        const ix = Math.min(s.start.x, s.end.x);
+        const iy = Math.min(s.start.y, s.end.y);
+        const iw = Math.abs(s.end.x - s.start.x);
+        const ih = Math.abs(s.end.y - s.start.y);
+        const fo = document.createElementNS("http://www.w3.org/2000/svg", "foreignObject");
+        fo.setAttribute("x", String(ix)); fo.setAttribute("y", String(iy));
+        fo.setAttribute("width", String(iw)); fo.setAttribute("height", String(ih));
+        const img = document.createElement("img");
+        img.src = s.imageUrl; img.style.width = "100%"; img.style.height = "100%";
+        fo.appendChild(img);
+        svg.appendChild(fo);
       }
     } catch {
       // Skip malformed shapes

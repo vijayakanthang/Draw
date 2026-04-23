@@ -261,6 +261,14 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Rename Room (Owner only)
+  socket.on("room-rename", ({ name }) => {
+    if (currentRoom && boards[currentRoom] && boards[currentRoom].ownerId === currentUserId) {
+      boards[currentRoom].name = name;
+      io.to(currentRoom).emit("room-rename-update", { name });
+    }
+  });
+
   // Sync cursors
   socket.on("cursor-move", (data) => {
     if (currentRoom && data && typeof data.x === "number" && typeof data.y === "number") {
