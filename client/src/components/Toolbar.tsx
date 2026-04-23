@@ -122,7 +122,7 @@ export default function Toolbar(props: ToolbarProps) {
   return (
     <>
       {/* 1. Main Tools & Collaboration (Top Center) */}
-      <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-2 p-1 ${glassClass} rounded-2xl shadow-2xl transition-all duration-500 max-w-[95vw] ${isPresenting ? "-translate-y-24 opacity-0 pointer-events-none" : "translate-y-0 opacity-100"
+      <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-2 p-1 ${glassClass} rounded-2xl shadow-2xl flex-shrink-0 transition-all duration-500 max-w-[95vw] overflow-hidden ${isPresenting ? "-translate-y-24 opacity-0 pointer-events-none" : "translate-y-0 opacity-100"
         } ${isSidebarOpen ? "md:left-[calc(50%-150px)]" : "md:left-1/2"
         }`}>
         <button
@@ -147,9 +147,20 @@ export default function Toolbar(props: ToolbarProps) {
 
         <div className={`w-[1px] h-6 ${borderClass} flex-shrink-0`} />
 
-        <div className="flex items-center gap-0.5 overflow-x-auto mobile-scroll-x scroll-smooth px-1">
+        {/* Tool buttons — horizontal scroll only, no vertical leak */}
+        <div
+          className="flex items-center gap-0.5 px-1"
+          style={{
+            overflowX: "auto",
+            overflowY: "hidden",
+            overscrollBehavior: "contain",
+            WebkitOverflowScrolling: "touch",
+            scrollbarWidth: "none",          /* Firefox */
+            msOverflowStyle: "none",         /* IE/Edge */
+          }}
+        >
           {mainTools.map((t) => (
-            <div key={t.id} className="relative group">
+            <div key={t.id} className="relative group flex-shrink-0">
               <button
                 onClick={() => props.onSelectTool(t.id)}
                 title={t.label}
@@ -269,7 +280,7 @@ export default function Toolbar(props: ToolbarProps) {
       </div>
 
       {/* 2. Top Right — Export + Connection Status (Mobile: hidden or moved) */}
-      <div className={`fixed top-4 right-4 z-[70] flex items-center gap-1.5 p-1 ${glassClass} rounded-2xl transition-all duration-500 mobile-hide ${isPresenting ? "-translate-y-24 opacity-0 pointer-events-none" : "translate-y-0 opacity-100"}`}>
+      <div className={`fixed top-4 right-4 z-[70] flex items-center gap-1.5 p-1 ${glassClass} rounded-2xl transition-all duration-500 mobile-hide flex-shrink-0 ${isPresenting ? "-translate-y-24 opacity-0 pointer-events-none" : "translate-y-0 opacity-100"}`}>
         <button 
           onClick={props.onToggleTheme}
           title={`Switch to ${isDark ? 'Light' : 'Dark'} Mode`}
@@ -325,7 +336,7 @@ export default function Toolbar(props: ToolbarProps) {
       </div>
 
       {/* 3. Page Navigator (Bottom Left) */}
-      <div className={`fixed bottom-4 left-4 z-50 flex items-center gap-1.5 p-1 ${glassClass} rounded-2xl transition-all duration-500 ${isPresenting ? "translate-y-24 opacity-0 pointer-events-none" : "translate-y-0 opacity-100"}`}>
+      <div className={`fixed bottom-4 left-4 z-50 flex items-center gap-1.5 p-1 flex-shrink-0 ${glassClass} rounded-2xl transition-all duration-500 ${isPresenting ? "translate-y-24 opacity-0 pointer-events-none" : "translate-y-0 opacity-100"}`}>
         <select
           value={props.activePageId}
           onChange={(e) => props.onSelectPage(e.target.value)}
@@ -337,13 +348,23 @@ export default function Toolbar(props: ToolbarProps) {
       </div>
 
       {/* 4. Action Menu (Bottom Center) */}
-      <div className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 transition-all duration-500 max-w-[95vw] ${isPresenting ? "translate-y-24 opacity-0 pointer-events-none" : "translate-y-0 opacity-100"}`}>
-        <div className={`flex items-center gap-1 p-1 ${glassClass} rounded-2xl shadow-2xl relative`}>
-          {/* Property Bar was here, now moved to tool popovers */}
+      <div className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 flex-shrink-0 transition-all duration-500 max-w-[95vw] ${isPresenting ? "translate-y-24 opacity-0 pointer-events-none" : "translate-y-0 opacity-100"}`}>
+        <div className={`flex items-center gap-1 p-1 ${glassClass} rounded-2xl shadow-2xl relative overflow-hidden`}>
 
-          <div className="flex items-center gap-0.5 overflow-x-auto mobile-scroll-x">
-            <button onClick={props.onUndo} disabled={!props.canUndo} className={`w-10 h-10 flex items-center justify-center rounded-xl ${isDark ? 'text-white/40' : 'text-slate-400'} disabled:opacity-20 transition-colors`}><UndoIcon /></button>
-            <button onClick={props.onRedo} disabled={!props.canRedo} className={`w-10 h-10 flex items-center justify-center rounded-xl ${isDark ? 'text-white/40' : 'text-slate-400'} disabled:opacity-20 transition-colors`}><RedoIcon /></button>
+          {/* Action buttons — horizontal scroll only, no vertical leak */}
+          <div
+            className="flex items-center gap-0.5"
+            style={{
+              overflowX: "auto",
+              overflowY: "hidden",
+              overscrollBehavior: "contain",
+              WebkitOverflowScrolling: "touch",
+              scrollbarWidth: "none",
+              msOverflowStyle: "none",
+            }}
+          >
+            <button onClick={props.onUndo} disabled={!props.canUndo} className={`w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0 ${isDark ? 'text-white/40' : 'text-slate-400'} disabled:opacity-20 transition-colors`}><UndoIcon /></button>
+            <button onClick={props.onRedo} disabled={!props.canRedo} className={`w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0 ${isDark ? 'text-white/40' : 'text-slate-400'} disabled:opacity-20 transition-colors`}><RedoIcon /></button>
 
             <div className={`w-[1px] h-5 ${borderClass} mx-1 flex-shrink-0`} />
 
@@ -352,17 +373,17 @@ export default function Toolbar(props: ToolbarProps) {
               <input type="color" value={props.color} onChange={(e) => props.setColor(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
             </div>
 
-            <button onClick={props.onDelete} disabled={!props.canDelete} className="w-10 h-10 flex items-center justify-center rounded-xl text-red-500/50 disabled:opacity-20 transition-colors"><TrashIcon /></button>
-            <button onClick={props.onToggleLibrary} className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${props.showLibrary ? "bg-indigo-500/20 text-indigo-500" : `${isDark ? 'text-white/40' : 'text-slate-400'}`}`}><LibraryIcon /></button>
+            <button onClick={props.onDelete} disabled={!props.canDelete} className="w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0 text-red-500/50 disabled:opacity-20 transition-colors"><TrashIcon /></button>
+            <button onClick={props.onToggleLibrary} className={`w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0 transition-all ${props.showLibrary ? "bg-indigo-500/20 text-indigo-500" : `${isDark ? 'text-white/40' : 'text-slate-400'}`}`}><LibraryIcon /></button>
 
             <div className={`w-[1px] h-5 ${borderClass} mx-1 flex-shrink-0`} />
 
-            <button onClick={props.onToggleTimeline} className={`w-10 h-10 flex items-center justify-center rounded-xl ${props.showTimeline ? "bg-blue-500/20 text-blue-500" : `${isDark ? 'text-white/40' : 'text-slate-400'}`}`}><TimerIcon /></button>
-            <button onClick={() => props.setGridSnap(!props.gridSnap)} className={`w-10 h-10 flex items-center justify-center rounded-xl ${props.gridSnap ? "bg-blue-500/20 text-blue-500" : `${isDark ? 'text-white/40' : 'text-slate-400'}`}`}><GridIcon /></button>
-            <button onClick={() => props.onToggleHandDrawn(!props.handDrawn)} className={`w-10 h-10 flex items-center justify-center rounded-xl ${props.handDrawn ? "bg-amber-400/20 text-amber-500" : `${isDark ? 'text-white/40' : 'text-slate-400'}`}`}><PencilLineIcon /></button>
-            <button onClick={props.onTogglePresentation} className={`w-10 h-10 flex items-center justify-center rounded-xl ${isDark ? 'text-white/40' : 'text-slate-400'} transition-all hover:bg-black/5 mobile-hide`}><PresentationIcon /></button>
-            <button onClick={props.onToggleSearch} className={`w-10 h-10 flex items-center justify-center rounded-xl ${isDark ? 'text-white/40' : 'text-slate-400'} transition-all hover:bg-black/5`}><SearchIcon /></button>
-            <button onClick={props.onToggleAI} className={`w-10 h-10 flex items-center justify-center rounded-xl bg-blue-500/10 text-blue-500 transition-all hover:scale-110`}><SparklesIcon /></button>
+            <button onClick={props.onToggleTimeline} className={`w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0 ${props.showTimeline ? "bg-blue-500/20 text-blue-500" : `${isDark ? 'text-white/40' : 'text-slate-400'}`}`}><TimerIcon /></button>
+            <button onClick={() => props.setGridSnap(!props.gridSnap)} className={`w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0 ${props.gridSnap ? "bg-blue-500/20 text-blue-500" : `${isDark ? 'text-white/40' : 'text-slate-400'}`}`}><GridIcon /></button>
+            <button onClick={() => props.onToggleHandDrawn(!props.handDrawn)} className={`w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0 ${props.handDrawn ? "bg-amber-400/20 text-amber-500" : `${isDark ? 'text-white/40' : 'text-slate-400'}`}`}><PencilLineIcon /></button>
+            <button onClick={props.onTogglePresentation} className={`w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0 ${isDark ? 'text-white/40' : 'text-slate-400'} transition-all hover:bg-black/5 mobile-hide`}><PresentationIcon /></button>
+            <button onClick={props.onToggleSearch} className={`w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0 ${isDark ? 'text-white/40' : 'text-slate-400'} transition-all hover:bg-black/5`}><SearchIcon /></button>
+            <button onClick={props.onToggleAI} className={`w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0 bg-blue-500/10 text-blue-500 transition-all hover:scale-110`}><SparklesIcon /></button>
           </div>
         </div>
       </div>
