@@ -72,6 +72,10 @@ export default function CanvasBoard({
   const [laserPath, setLaserPath] = useState<{ x: number, y: number, time: number }[]>([]);
   const imageCacheRef = useRef<Map<string, HTMLImageElement>>(new Map());
 
+  // FIX #4: Use a ref to always call the latest render function from the RAF loop,
+  // avoiding stale closure issues with the empty-dep useEffect RAF loop.
+  const renderRef = useRef<() => void>(() => {});
+
   // Helper: load image from URL into cache
   const getImage = useCallback((url: string): HTMLImageElement | null => {
     const cache = imageCacheRef.current;
@@ -120,7 +124,7 @@ export default function CanvasBoard({
     reader.readAsDataURL(file);
   }, [shapes, onShapesChange, pan, scale]);
 
-  // Create rough canvas after mount (fix: useMemo with ref doesn't work)
+  // Create rough canvas after mount
   useEffect(() => {
     if (canvasRef.current) {
       rcRef.current = rough.canvas(canvasRef.current);
@@ -135,13 +139,8 @@ export default function CanvasBoard({
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    
-    // Convert client coordinates to canvas-space coordinates
-    // getBoundingClientRect is in logical pixels, and we use ctx.scale(dpr, dpr) 
-    // in render to draw in logical pixels, so we don't need dpr here.
     const x = (e.clientX - rect.left);
     const y = (e.clientY - rect.top);
-    
     return {
       x: (x - pan.x) / scale,
       y: (y - pan.y) / scale
@@ -164,10 +163,11 @@ export default function CanvasBoard({
     isDirty.current = true;
   }, []);
 
+  // FIX #4: RAF loop calls renderRef.current so it always uses the latest render closure.
   useEffect(() => {
     const loop = () => {
       if (isDirty.current) {
-        render();
+        renderRef.current();
         isDirty.current = false;
       }
       rafRef.current = requestAnimationFrame(loop);
@@ -213,14 +213,13 @@ export default function CanvasBoard({
     const buffer = bufferRef.current; if (!buffer) return;
     const bCtx = buffer.getContext("2d"); if (!bCtx) return;
     const rc = bufferRcRef.current;
-    
-    // Ensure buffer matches main canvas size
+
     if (buffer.width !== canvas.width || buffer.height !== canvas.height) {
       buffer.width = canvas.width;
       buffer.height = canvas.height;
     }
 
-    // Set cursor based on tool/interaction
+    // FIX #5: Removed static cursor from JSX; set cursor dynamically here only.
     if (interaction.type === "pan") canvas.style.cursor = "grabbing";
     else if (interaction.type === "move") canvas.style.cursor = "move";
     else if (interaction.type === "resize") canvas.style.cursor = "nwse-resize";
@@ -230,25 +229,21 @@ export default function CanvasBoard({
     else if (selectedTool === "laser") canvas.style.cursor = "url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmNDc1NyIgc3Ryb2tlPSIjZmY0NzU3IiBzdHJva2Utd2lkdGg9IjIiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjQiLz48L3N2Zz4=') 12 12, auto";
     else if (selectedTool === "none") canvas.style.cursor = "grab";
     else canvas.style.cursor = "default";
-    if (buffer.width !== canvas.width || buffer.height !== canvas.height) {
-      buffer.width = canvas.width;
-      buffer.height = canvas.height;
-    }
 
     const dpr = window.devicePixelRatio || 1;
 
     // 1. Draw Grid on main canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height); 
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
-    ctx.scale(dpr, dpr); // Account for DPR scale set in updateSize
+    ctx.scale(dpr, dpr);
     ctx.translate(pan.x, pan.y); ctx.scale(scale, scale);
-    drawGrid(ctx); 
+    drawGrid(ctx, dpr);
     ctx.restore();
 
     // 2. Clear Buffer and Setup Transform
     bCtx.clearRect(0, 0, buffer.width, buffer.height);
     bCtx.save();
-    bCtx.scale(dpr, dpr); // Account for DPR scale set in updateSize
+    bCtx.scale(dpr, dpr);
     bCtx.translate(pan.x, pan.y); bCtx.scale(scale, scale);
 
     // 3. Draw Shapes to Buffer
@@ -257,7 +252,7 @@ export default function CanvasBoard({
 
     normalShapes.forEach(s => drawShape(s, bCtx, rc));
     if (currentShape && currentShape.type !== "eraser") drawShape(currentShape, bCtx, rc);
-    
+
     // Remote in-progress shapes
     Object.values(remoteDrawings).forEach(rd => {
       if (rd.shape.type !== "eraser") {
@@ -283,8 +278,7 @@ export default function CanvasBoard({
 
     erasures.forEach(e => { if (e.path) drawEraserStroke(e.path, e.strokeWidth || 20); });
     if (currentShape && currentShape.type === "eraser" && currentShape.path) drawEraserStroke(currentShape.path, activeProperties.eraserSize);
-    
-    // Remote erasures
+
     Object.values(remoteDrawings).forEach(rd => {
       if (rd.shape.type === "eraser" && rd.shape.path) {
         bCtx.globalAlpha = 0.4;
@@ -297,11 +291,8 @@ export default function CanvasBoard({
     bCtx.restore();
 
     // 5. Composite Buffer to main canvas
-    // Since both buffer and main canvas have the SAME DPR scaling, 
-    // and we are drawing at identity on ctx (after restore), 
-    // we must ensure ctx is NOT scaled by DPR here, or draw at logical size.
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset to physical pixels for drawImage
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(buffer, 0, 0);
     ctx.restore();
 
@@ -309,8 +300,7 @@ export default function CanvasBoard({
     ctx.save();
     ctx.scale(dpr, dpr);
     ctx.translate(pan.x, pan.y); ctx.scale(scale, scale);
-    
-    // Draw marquee
+
     if (marquee) {
       ctx.strokeStyle = "#6366f1";
       ctx.lineWidth = 1 / scale;
@@ -323,16 +313,19 @@ export default function CanvasBoard({
       ctx.strokeRect(mx, my, mw, mh);
     }
 
-    if (selectedShapeIds.length > 0) { 
+    if (selectedShapeIds.length > 0) {
       selectedShapeIds.forEach(id => {
-        const s = shapes.find(sh => sh.id === id); 
+        const s = shapes.find(sh => sh.id === id);
         if (s) drawSelection(s, ctx, selectedShapeIds.length > 1);
       });
     }
-    ctx.restore(); 
+    ctx.restore();
     drawCursors(ctx);
     drawLaser(ctx);
   };
+
+  // FIX #4: Keep renderRef in sync with the latest render closure every render cycle.
+  renderRef.current = render;
 
   const drawLaser = (ctx: CanvasRenderingContext2D) => {
     if (laserPath.length < 2) return;
@@ -358,14 +351,17 @@ export default function CanvasBoard({
     ctx.restore();
   };
 
-  const drawGrid = (ctx: CanvasRenderingContext2D) => {
+  // FIX #7: Accept dpr param so grid boundaries use logical pixels correctly.
+  const drawGrid = (ctx: CanvasRenderingContext2D, dpr: number) => {
     const gridSize = 50;
     ctx.strokeStyle = isDark ? "#ffffff" : "#000000";
     ctx.lineWidth = 0.5;
     ctx.globalAlpha = isDark ? 0.03 : 0.05;
+    const logicalWidth = ctx.canvas.width / dpr;
+    const logicalHeight = ctx.canvas.height / dpr;
     const left = -pan.x / scale, top = -pan.y / scale;
-    const right = (ctx.canvas.width - pan.x) / scale;
-    const bottom = (ctx.canvas.height - pan.y) / scale;
+    const right = (logicalWidth - pan.x) / scale;
+    const bottom = (logicalHeight - pan.y) / scale;
     ctx.beginPath();
     for (let x = Math.floor(left / gridSize) * gridSize; x < right; x += gridSize) { ctx.moveTo(x, top); ctx.lineTo(x, bottom); }
     for (let y = Math.floor(top / gridSize) * gridSize; y < bottom; y += gridSize) { ctx.moveTo(left, y); ctx.lineTo(right, y); }
@@ -376,13 +372,13 @@ export default function CanvasBoard({
     if (!rc) return;
     const oldAlpha = ctx.globalAlpha;
     ctx.globalAlpha = s.opacity ?? 1;
-    
-    const options: any = { 
-      stroke: s.color || "#fff", 
-      strokeWidth: s.strokeWidth || 2, 
-      roughness: handDrawn ? (s.roughness ?? 1) : 0, 
-      bowing: handDrawn ? 1.5 : 0, 
-      seed: s.seed 
+
+    const options: any = {
+      stroke: s.color || "#fff",
+      strokeWidth: s.strokeWidth || 2,
+      roughness: handDrawn ? (s.roughness ?? 1) : 0,
+      bowing: handDrawn ? 1.5 : 0,
+      seed: s.seed
     };
 
     if (s.fillColor) {
@@ -394,10 +390,12 @@ export default function CanvasBoard({
       case "rectangle": if (!s.start || !s.end) return; rc.rectangle(s.start.x, s.start.y, s.end.x - s.start.x, s.end.y - s.start.y, options); break;
       case "circle": if (!s.start || !s.end) return; { const r = Math.hypot(s.end.x - s.start.x, s.end.y - s.start.y); rc.circle(s.start.x, s.start.y, r * 2, options); } break;
       case "line": if (!s.start || !s.end) return; rc.line(s.start.x, s.start.y, s.end.x, s.end.y, options); break;
+      // FIX #6: Arrow head length scaled by current scale so it looks consistent at all zoom levels.
       case "arrow": if (!s.start || !s.end) return; rc.line(s.start.x, s.start.y, s.end.x, s.end.y, options); {
-        const angle = Math.atan2(s.end.y - s.start.y, s.end.x - s.start.x); const l = 15;
+        const angle = Math.atan2(s.end.y - s.start.y, s.end.x - s.start.x);
+        const l = 15 / scale;
         rc.line(s.end.x, s.end.y, s.end.x - l * Math.cos(angle - Math.PI / 6), s.end.y - l * Math.sin(angle - Math.PI / 6), options);
-        rc.line(s.end.x, s.end.y, s.end.x - l * Math.cos(angle + Math.PI / 6), s.end.y - l * Math.sin(angle + Math.PI / 6), options); 
+        rc.line(s.end.x, s.end.y, s.end.x - l * Math.cos(angle + Math.PI / 6), s.end.y - l * Math.sin(angle + Math.PI / 6), options);
       } break;
       case "pencil": if (s.path && s.path.length > 1) rc.linearPath(s.path.map(p => [p.x, p.y] as [number, number]), options); break;
       case "text": {
@@ -432,7 +430,6 @@ export default function CanvasBoard({
         if (img) {
           ctx.drawImage(img, ix, iy, iw, ih);
         } else {
-          // Placeholder while loading
           ctx.strokeStyle = "#6366f1";
           ctx.lineWidth = 2;
           ctx.setLineDash([4, 4]);
@@ -450,26 +447,24 @@ export default function CanvasBoard({
   const drawSelection = (s: Shape, ctx: CanvasRenderingContext2D, isMulti: boolean) => {
     const isLocked = s.isLocked;
     ctx.strokeStyle = isLocked ? "#f59e0b" : "#6366f1"; ctx.lineWidth = 1.5 / scale; ctx.setLineDash([6 / scale, 4 / scale]);
-    const b = getBounds(s); 
+    const b = getBounds(s);
     ctx.strokeRect(b.x - 5, b.y - 5, b.w + 10, b.h + 10); ctx.setLineDash([]);
 
-    // Lock indicator
     if (isLocked) {
       const iconSize = 14 / scale;
       ctx.fillStyle = "#f59e0b";
       ctx.font = `bold ${iconSize}px Inter, sans-serif`;
       ctx.fillText("🔒", b.x + b.w - iconSize, b.y - 8 / scale);
-      return; // No resize handles for locked shapes
+      return;
     }
-    
-    if (isMulti) return; // Don't show handles for multi-selection
 
-    // Resize handles
+    if (isMulti) return;
+
     const handleSize = 8 / scale;
     ctx.fillStyle = "#fff";
     ctx.strokeStyle = "#6366f1";
     ctx.lineWidth = 1.5 / scale;
-    
+
     const handles = [
       { x: b.x - 5, y: b.y - 5, type: "tl" },
       { x: b.x + b.w / 2, y: b.y - 5, type: "tc" },
@@ -480,7 +475,7 @@ export default function CanvasBoard({
       { x: b.x + b.w / 2, y: b.y + b.h + 5, type: "bc" },
       { x: b.x + b.w + 5, y: b.y + b.h + 5, type: "br" },
     ];
-    
+
     handles.forEach(h => {
       ctx.beginPath();
       ctx.roundRect(h.x - handleSize/2, h.y - handleSize/2, handleSize, handleSize, 2 / scale);
@@ -488,6 +483,10 @@ export default function CanvasBoard({
       ctx.stroke();
     });
   };
+
+  // FIX #1 & #2: Add minimum hit-target padding for line/arrow so axis-aligned
+  // lines (w=0 or h=0) are still selectable and have valid bounds for hit-detection.
+  const LINE_HIT_PADDING = 10;
 
   const getBounds = (s: Shape) => {
     if (s.type === "pencil" && s.path) {
@@ -501,18 +500,23 @@ export default function CanvasBoard({
       if (ctx) {
         ctx.font = `${s.fontSize || 20}px ${s.fontFamily || 'Inter, sans-serif'}`;
         const metrics = ctx.measureText(s.text || "");
-        return { 
-          x: s.x || 0, 
-          y: (s.y || 0) - (s.fontSize || 20), 
-          w: metrics.width, 
-          h: (s.fontSize || 20) * 1.2 
+        return {
+          x: s.x || 0,
+          y: (s.y || 0) - (s.fontSize || 20),
+          w: metrics.width,
+          h: (s.fontSize || 20) * 1.2
         };
       }
       return { x: s.x || 0, y: (s.y || 0) - 20, w: 100, h: 25 };
     }
     if (!s.start || !s.end) return { x: 0, y: 0, w: 0, h: 0 };
     const x = Math.min(s.start.x, s.end.x); const y = Math.min(s.start.y, s.end.y);
-    const w = Math.abs(s.start.x - s.end.x); const h = Math.abs(s.start.y - s.end.y);
+    let w = Math.abs(s.start.x - s.end.x); let h = Math.abs(s.start.y - s.end.y);
+    // FIX #1: Ensure line/arrow always has a minimum hit-target area.
+    if (s.type === "line" || s.type === "arrow") {
+      if (w < LINE_HIT_PADDING) { w = LINE_HIT_PADDING; }
+      if (h < LINE_HIT_PADDING) { h = LINE_HIT_PADDING; }
+    }
     return { x, y, w, h };
   };
 
@@ -520,28 +524,24 @@ export default function CanvasBoard({
     Object.entries(remoteCursors).forEach(([id, pos]) => {
       const cursorColor = hashColor(pos.username || id);
       const screenX = pos.x * scale + pan.x, screenY = pos.y * scale + pan.y;
-      
-      // Cursor triangle
+
       ctx.fillStyle = cursorColor;
-      ctx.beginPath(); 
-      ctx.moveTo(screenX, screenY); 
-      ctx.lineTo(screenX + 14, screenY + 5); 
-      ctx.lineTo(screenX + 5, screenY + 14); 
+      ctx.beginPath();
+      ctx.moveTo(screenX, screenY);
+      ctx.lineTo(screenX + 14, screenY + 5);
+      ctx.lineTo(screenX + 5, screenY + 14);
       ctx.fill();
-      
-      // Name label
+
       const label = `${pos.username || "Guest"} (#${pos.userNumber || "?"})`;
       ctx.font = "bold 10px Inter, sans-serif";
       const textWidth = ctx.measureText(label).width;
       const labelX = screenX + 14, labelY = screenY + 22;
-      
-      // Label background
+
       ctx.fillStyle = cursorColor;
       ctx.beginPath();
       ctx.roundRect(labelX - 2, labelY - 10, textWidth + 10, 16, 4);
       ctx.fill();
-      
-      // Label text
+
       ctx.fillStyle = "#fff";
       ctx.fillText(label, labelX + 3, labelY + 2);
     });
@@ -552,7 +552,7 @@ export default function CanvasBoard({
     const target = shapes.find(s => {
       if (s.type === "rectangle" || s.type === "sticky" || s.type === "circle") {
         const b = getBounds(s);
-        return pos.x >= b.x - snapThreshold && pos.x <= b.x + b.w + snapThreshold && 
+        return pos.x >= b.x - snapThreshold && pos.x <= b.x + b.w + snapThreshold &&
                pos.y >= b.y - snapThreshold && pos.y <= b.y + b.h + snapThreshold;
       }
       return false;
@@ -571,12 +571,13 @@ export default function CanvasBoard({
     activePointersRef.current[e.pointerId] = { x: e.clientX, y: e.clientY };
 
     if (e.button === 1 || (e.button === 0 && selectedTool === "none")) { setInteraction({ type: "pan", startPos: { x: e.clientX, y: e.clientY } }); return; }
-    
+
     if (selectedTool === "select") {
-      // 1. Check handles for single selection (not locked)
       if (selectedShapeIds.length === 1) {
         const s = shapes.find(sh => sh.id === selectedShapeIds[0]);
-        if (s && !s.isLocked) {
+        // FIX #3: Skip resize handles for line/arrow — they are two-point shapes,
+        // not rectangles, so box-handle resizing produces wrong results.
+        if (s && !s.isLocked && s.type !== "line" && s.type !== "arrow") {
           const b = getBounds(s);
           const handleSize = 15 / scale;
           const handles = [
@@ -597,9 +598,8 @@ export default function CanvasBoard({
         }
       }
 
-      // 2. Check hit on existing selection for moving
       const hit = shapes.find(s => { const b = getBounds(s); return pos.x >= b.x && pos.x <= b.x + b.w && pos.y >= b.y && pos.y <= b.y + b.h; });
-      
+
       if (hit) {
         if (!selectedShapeIds.includes(hit.id)) {
             if (e.shiftKey) {
@@ -608,14 +608,12 @@ export default function CanvasBoard({
                 onSelectShapes([hit.id]);
             }
         }
-        // Block move if ALL selected shapes are locked
         const allLocked = shapes.filter(s => selectedShapeIds.includes(s.id) || s.id === hit.id).every(s => s.isLocked);
         if (!allLocked) {
           setInteraction({ type: "move", activeId: hit.id, startPos: pos });
         }
         return;
       } else {
-        // Start marquee
         if (!e.shiftKey) onSelectShapes([]);
         setInteraction({ type: "marquee", startPos: pos });
         setMarquee({ start: pos, end: pos });
@@ -655,15 +653,15 @@ export default function CanvasBoard({
       const snappedPos = snapPoint(pos);
       const anchor = (selectedTool === "arrow" || selectedTool === "line") ? getAnchorPoint(snappedPos) : null;
       const needsFill = selectedTool === "rectangle" || selectedTool === "circle";
-      setCurrentShape({ 
-        id: crypto.randomUUID(), 
-        type: selectedTool, 
-        start: anchor ? anchor.point : snappedPos, 
-        end: snappedPos, 
-        path: [snappedPos], 
-        color, 
-        seed: Math.floor(Math.random() * 2**31), 
-        roughness: 1, 
+      setCurrentShape({
+        id: crypto.randomUUID(),
+        type: selectedTool,
+        start: anchor ? anchor.point : snappedPos,
+        end: snappedPos,
+        path: [snappedPos],
+        color,
+        seed: Math.floor(Math.random() * 2**31),
+        roughness: 1,
         anchoredStartId: anchor?.id,
         strokeWidth: activeProperties.strokeWidth,
         opacity: activeProperties.opacity,
@@ -683,29 +681,26 @@ export default function CanvasBoard({
     const pointers = activePointersRef.current;
     const pointerIds = Object.keys(pointers);
 
-    // Pinch-to-zoom & Two-finger Pan
     if (pointerIds.length === 2) {
       const p1 = pointers[Number(pointerIds[0])];
       const p2 = pointers[Number(pointerIds[1])];
       const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
       const centerX = (p1.x + p2.x) / 2;
       const centerY = (p1.y + p2.y) / 2;
-      
+
       if (lastPinchDistance.current !== null) {
         const delta = dist / lastPinchDistance.current;
         const newScale = Math.min(Math.max(scale * delta, 0.1), 10);
-        
+
         const rect = canvasRef.current?.getBoundingClientRect();
         if (rect) {
           const mouseX = centerX - rect.left, mouseY = centerY - rect.top;
           const worldX = (mouseX - pan.x) / scale, worldY = (mouseY - pan.y) / scale;
-          
-          // Apply Zoom
+
           if (Math.abs(1 - delta) > 0.001) {
             setScale(newScale);
             setPan({ x: mouseX - worldX * newScale, y: mouseY - worldY * newScale });
           } else if (interaction.type === "pan") {
-            // Simultaneous pan if zooming is subtle
             const dx = centerX - interaction.startPos!.x;
             const dy = centerY - interaction.startPos!.y;
             setPan(prev => ({ x: prev.x + dx, y: prev.y + dy }));
@@ -719,9 +714,8 @@ export default function CanvasBoard({
       lastPinchDistance.current = null;
     }
 
-    const pos = toCanvasPos(e); 
-    
-    // Throttle cursor move emits
+    const pos = toCanvasPos(e);
+
     const now = Date.now();
     if (now - lastCursorEmit.current > 30) {
       socket?.emit("cursor-move", { x: pos.x, y: pos.y, username });
@@ -731,7 +725,7 @@ export default function CanvasBoard({
         setLaserPath(prev => [...prev, { x: pos.x, y: pos.y, time: Date.now() }]);
         isDirty.current = true;
     }
-    
+
     if (interaction.type === "pan") {
       const dx = e.clientX - interaction.startPos!.x; const dy = e.clientY - interaction.startPos!.y;
       setPan(prev => ({ x: prev.x + dx, y: prev.y + dy })); setInteraction(prev => ({ ...prev, startPos: { x: e.clientX, y: e.clientY } })); return;
@@ -742,12 +736,12 @@ export default function CanvasBoard({
       const my = Math.min(interaction.startPos!.y, pos.y);
       const mw = Math.abs(interaction.startPos!.x - pos.x);
       const mh = Math.abs(interaction.startPos!.y - pos.y);
-      
+
       const inMarquee = shapes.filter(s => {
         const b = getBounds(s);
         return b.x >= mx && b.x + b.w <= mx + mw && b.y >= my && b.y + b.h <= my + mh;
       }).map(s => s.id);
-      
+
       onSelectShapes(inMarquee);
       return;
     }
@@ -756,7 +750,6 @@ export default function CanvasBoard({
       const dx = pos.x - interaction.startPos!.x; const dy = pos.y - interaction.startPos!.y;
       const updatedShapes = shapes.map(s => {
         if (!selectedShapeIds.includes(s.id) || s.isLocked) {
-          // Check for anchors
           if (s.anchoredStartId && selectedShapeIds.includes(s.anchoredStartId)) {
              const anchor = shapes.find(item => item.id === s.anchoredStartId);
              if (anchor) {
@@ -777,7 +770,7 @@ export default function CanvasBoard({
         if (s.type === "sticky" || s.type === "text") return { ...s, x: (s.x || 0) + dx, y: (s.y || 0) + dy };
         return { ...s, start: s.start ? { x: s.start.x + dx, y: s.start.y + dy } : undefined, end: s.end ? { x: s.end.x + dx, y: s.end.y + dy } : undefined };
       });
-      onShapesChange(updatedShapes); 
+      onShapesChange(updatedShapes);
       setInteraction(prev => ({ ...prev, startPos: pos }));
       scheduleRender();
       return;
@@ -800,14 +793,15 @@ export default function CanvasBoard({
       scheduleRender();
     }
 
+    // FIX #3: Skip resize for line/arrow types — handled as endpoint drag above via move.
     if (interaction.type === "resize" && interaction.activeId && interaction.handle) {
       const dx = pos.x - interaction.startPos!.x;
       const dy = pos.y - interaction.startPos!.y;
-      
+
       const updatedShapes = shapes.map(s => {
         if (s.id !== interaction.activeId) return s;
-        if (s.type === "pencil") return s;
-        
+        if (s.type === "pencil" || s.type === "line" || s.type === "arrow") return s;
+
         let { start, end, x, y, width, height } = s;
         const handle = interaction.handle!;
 
@@ -820,8 +814,7 @@ export default function CanvasBoard({
         if (handle.includes("r")) { curW += dx; }
         if (handle.includes("t")) { curY += dy; curH -= dy; }
         if (handle.includes("b")) { curH += dy; }
-        
-        // Snap the new dimensions
+
         const snappedX = snapToGrid(curX);
         const snappedY = snapToGrid(curY);
         const snappedW = snapToGrid(curW);
@@ -830,11 +823,11 @@ export default function CanvasBoard({
         if (s.type === "sticky" || s.type === "text") {
           return { ...s, x: snappedX, y: snappedY, width: Math.max(snappedW, 20), height: Math.max(snappedH, 20) };
         }
-        
-        return { 
-          ...s, 
-          start: { x: snappedX, y: snappedY }, 
-          end: { x: snappedX + snappedW, y: snappedY + snappedH } 
+
+        return {
+          ...s,
+          start: { x: snappedX, y: snappedY },
+          end: { x: snappedX + snappedW, y: snappedY + snappedH }
         };
       });
       onShapesChange(updatedShapes);
@@ -857,20 +850,18 @@ export default function CanvasBoard({
 
   const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
-    const zoomSpeed = 0.002; 
+    const zoomSpeed = 0.002;
     if (e.ctrlKey) {
-      // Pinch or Ctrl+Wheel
       const dScale = 1 - e.deltaY * zoomSpeed;
       const newScale = Math.min(Math.max(scale * dScale, 0.1), 10);
       const rect = canvasRef.current?.getBoundingClientRect();
       if (rect) {
-        const mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top; 
+        const mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top;
         const worldX = (mouseX - pan.x) / scale, worldY = (mouseY - pan.y) / scale;
         setScale(newScale); setPan({ x: mouseX - worldX * newScale, y: mouseY - worldY * newScale });
       }
-    } else { 
-      // Regular Pan
-      setPan(prev => ({ x: prev.x - e.deltaX, y: prev.y - e.deltaY })); 
+    } else {
+      setPan(prev => ({ x: prev.x - e.deltaX, y: prev.y - e.deltaY }));
     }
   }, [pan, scale]);
 
@@ -881,7 +872,7 @@ export default function CanvasBoard({
   }, [handleWheel]);
 
   useEffect(() => {
-    const updateSize = () => { 
+    const updateSize = () => {
       const canvas = canvasRef.current;
       const buffer = bufferRef.current;
       if (!canvas || !buffer) return;
@@ -898,14 +889,13 @@ export default function CanvasBoard({
       buffer.width = w * dpr;
       buffer.height = h * dpr;
 
-      // Re-initialize rough canvas if needed (rough.js captures width/height)
       bufferRcRef.current = rough.canvas(buffer);
       rcRef.current = rough.canvas(canvas);
 
       scheduleRender();
     };
 
-    window.addEventListener("resize", updateSize); 
+    window.addEventListener("resize", updateSize);
     updateSize();
     return () => window.removeEventListener("resize", updateSize);
   }, [scheduleRender]);
@@ -956,14 +946,15 @@ export default function CanvasBoard({
 
   return (
     <div className="w-full h-full overflow-hidden bg-transparent touch-none overscroll-none">
-      <canvas 
-        ref={canvasRef} 
-        onPointerDown={handlePointerDown} 
-        onPointerMove={handlePointerMove} 
-        onPointerUp={handlePointerUp} 
+      {/* FIX #5: Removed static inline cursor style — cursor is now managed exclusively
+          by render() via canvas.style.cursor for correct interaction-aware behavior. */}
+      <canvas
+        ref={canvasRef}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
-        className="block touch-none" 
-        style={{ cursor: selectedTool === "none" ? "grab" : selectedTool === "select" ? "default" : selectedTool === "eraser" ? "cell" : "crosshair" }}
+        className="block touch-none"
       />
       <Minimap shapes={shapes} pan={pan} scale={scale} canvasWidth={canvasRef.current?.width || window.innerWidth} canvasHeight={canvasRef.current?.height || window.innerHeight} />
     </div>
