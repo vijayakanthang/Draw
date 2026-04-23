@@ -1,6 +1,9 @@
-# ✨ Draw: The Intelligent Whiteboard
+# ✨ Draw Together — Collaborative Whiteboard
 
-**Draw** is a production-grade, collaborative design platform that combines real-time multiplayer editing with advanced AI-powered diagramming. Built on the MERN stack with a focus on speed, aesthetics, and intelligence — it's your one-stop workspace for brainstorming, planning, and design.
+**Draw Together** is a production-grade, collaborative design platform that combines real-time multiplayer editing with advanced AI-powered diagramming. Built on the MERN stack with a focus on speed, aesthetics, and intelligence — your one-stop workspace for brainstorming, planning, and design.
+
+> 🌐 **Live App**: [https://doodleroom.vercel.app](https://doodleroom.vercel.app)
+> No accounts. No setup. Just open and draw.
 
 ---
 
@@ -34,6 +37,7 @@
 - **Connection Status** — Live WebSocket indicator (Connected / Reconnecting / Disconnected)
 - **Auto-Save** — Continuous board state sync with save status indicator
 - **Invite Link** — One-click room sharing via the Invite button
+- **No Account Required** — Just share a link and start collaborating instantly
 
 ### 🧠 AI & Intelligence
 - **AI Command Palette** — Natural language interface to generate diagrams and shapes
@@ -50,7 +54,7 @@
 - **Search Panel** — Search across all elements on the canvas
 - **Component Library** — Save and reuse custom shape templates
 - **Context Menu** — Right-click menu for quick actions on selected elements
-- **Minimap** — Thumbnail overview of the full canvas for navigation
+- **Minimap** — Thumbnail overview of the full canvas for easy navigation
 - **Multi-Page Support** — Create, name, and switch between multiple board pages
 - **Presentation Mode** — Fullscreen mode that hides all UI chrome
 - **Export PNG** — High-resolution raster export
@@ -76,6 +80,7 @@
 | **Real-Time** | Socket.io (WebSocket) |
 | **State Management** | Real-time WebSocket sync + local undo/redo history |
 | **AI / Intelligence** | Heuristic parser + shape recognition engine |
+| **Deployment** | Vercel (Frontend), Render (Backend) |
 
 ---
 
@@ -114,7 +119,7 @@ cd client && npm run dev
 3. **Start Command**: `cd server && node server.js`
 4. **Environment Variables**:
    - `PORT`: `5000`
-   - `CLIENT_ORIGIN`: Your Vercel frontend URL (e.g. `https://draw-app.vercel.app`)
+   - `CLIENT_ORIGIN`: Your Vercel frontend URL (e.g. `https://doodleroom.vercel.app`)
 
 ### Frontend — Recommended: [Vercel](https://vercel.com)
 1. Create a **New Project** and set the **Root Directory** to `client`
@@ -160,4 +165,4 @@ VITE_SOCKET_URL=http://localhost:5000
 
 ---
 
-
+Built with ❤️ by the deepmind team.
