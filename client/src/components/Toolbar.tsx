@@ -388,7 +388,6 @@ export default function Toolbar(props: ToolbarProps) {
             <button onClick={() => props.onToggleHandDrawn(!props.handDrawn)} className={`w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0 ${props.handDrawn ? "bg-amber-400/20 text-amber-500" : `${isDark ? 'text-white/40' : 'text-slate-400'}`}`}><PencilLineIcon /></button>
             <button onClick={props.onTogglePresentation} className={`w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0 ${isDark ? 'text-white/40' : 'text-slate-400'} transition-all hover:bg-black/5 mobile-hide`}><PresentationIcon /></button>
             <button onClick={props.onToggleSearch} className={`w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0 ${isDark ? 'text-white/40' : 'text-slate-400'} transition-all hover:bg-black/5`}><SearchIcon /></button>
-            <button onClick={props.onToggleAI} className={`w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0 bg-blue-500/10 text-blue-500 transition-all hover:scale-110`}><SparklesIcon /></button>
           </div>
         </div>
       </div>
