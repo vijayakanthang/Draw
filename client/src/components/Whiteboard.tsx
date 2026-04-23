@@ -48,7 +48,7 @@ export default function Whiteboard() {
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
   const [showAI, setShowAI] = useState<boolean>(false);
   const [showSearch, setShowSearch] = useState<boolean>(false);
-  const [roomName, setRoomName] = useState<string>("Untilted Board");
+  const [roomName, setRoomName] = useState<string>("Untitled Board");
   const [isSaving, setIsSaving] = useState<boolean>(false);
   
   // Board Transform State

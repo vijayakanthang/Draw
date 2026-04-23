@@ -122,7 +122,7 @@ export default function Toolbar(props: ToolbarProps) {
   return (
     <>
       {/* 1. Main Tools & Collaboration (Top Center) */}
-      <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-2 p-1 ${glassClass} rounded-2xl shadow-2xl flex-shrink-0 transition-all duration-500 max-w-[95vw] overflow-hidden ${isPresenting ? "-translate-y-24 opacity-0 pointer-events-none" : "translate-y-0 opacity-100"
+      <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-2 p-1 ${glassClass} rounded-2xl shadow-2xl flex-shrink-0 transition-all duration-500 max-w-[95vw] ${isPresenting ? "-translate-y-24 opacity-0 pointer-events-none" : "translate-y-0 opacity-100"
         } ${isSidebarOpen ? "md:left-[calc(50%-150px)]" : "md:left-1/2"
         }`}>
         <button
@@ -171,101 +171,106 @@ export default function Toolbar(props: ToolbarProps) {
               >
                 <div className="scale-90">{t.icon}</div>
               </button>
-
-              {/* Property Popover for the selected tool */}
-              {props.selectedTool === t.id && t.id !== "none" && t.id !== "select" && t.id !== "comment" && (
-                <div className="absolute top-full left-1/2 -translate-x-1/2 pt-3 z-[100] animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200">
-                  <div className={`flex flex-col gap-3 p-4 ${glassClass} rounded-2xl shadow-2xl min-w-[200px] border border-white/10`}>
-                    <div className="flex items-center justify-between gap-4">
-                      <span className={`text-[10px] font-black uppercase tracking-widest ${isDark ? 'text-white/30' : 'text-slate-400'}`}>
-                        {t.id === "eraser" ? "Size" : "Stroke"}
-                      </span>
-                      <div className="flex bg-black/5 rounded-lg p-0.5">
-                        {[
-                          { val: t.id === "eraser" ? 10 : 1, label: "T" },
-                          { val: t.id === "eraser" ? 20 : 3, label: "M" },
-                          { val: t.id === "eraser" ? 40 : 6, label: "B" }
-                        ].map((s) => (
-                          <button
-                            key={s.val}
-                            onClick={() => {
-                              if (t.id === "eraser") props.setEraserSize(s.val);
-                              else props.setStrokeWidth(s.val);
-                            }}
-                            className={`w-8 h-8 flex items-center justify-center rounded-md text-[10px] font-bold transition-all ${
-                              (t.id === "eraser" ? props.eraserSize === s.val : props.strokeWidth === s.val)
-                                ? "bg-white shadow-sm text-blue-600"
-                                : `${textClass} hover:bg-white/10`
-                            }`}
-                          >
-                            {s.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {t.id !== "eraser" && (
-                      <div className="flex items-center justify-between gap-4">
-                        <span className={`text-[10px] font-black uppercase tracking-widest ${isDark ? 'text-white/30' : 'text-slate-400'}`}>Opacity</span>
-                        <input 
-                          type="range" min="0.1" max="1" step="0.1" 
-                          value={props.opacity} 
-                          onChange={(e) => props.setOpacity(parseFloat(e.target.value))}
-                          className="w-24 h-1.5 rounded-full accent-blue-600 cursor-pointer"
-                        />
-                      </div>
-                    )}
-
-                    {t.id === "text" && (
-                      <>
-                        <div className={`h-[1px] w-full ${borderClass}`} />
-                        <div className="flex items-center justify-between gap-2">
-                          <span className={`text-[10px] font-black uppercase tracking-widest ${isDark ? 'text-white/30' : 'text-slate-400'}`}>Style</span>
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => props.setBold(!props.bold)} className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all ${props.bold ? "bg-blue-600 text-white" : `hover:bg-black/5 ${textClass}`}`}><BoldIcon /></button>
-                            <button onClick={() => props.setItalic(!props.italic)} className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all ${props.italic ? "bg-blue-600 text-white" : `hover:bg-black/5 ${textClass}`}`}><ItalicIcon /></button>
-                            <button onClick={() => props.setUnderline(!props.underline)} className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all ${props.underline ? "bg-blue-600 text-white" : `hover:bg-black/5 ${textClass}`}`}><UnderlineIcon /></button>
-                          </div>
-                        </div>
-                        <div className="flex flex-col gap-1.5 mt-1">
-                           <span className={`text-[10px] font-black uppercase tracking-widest ${isDark ? 'text-white/30' : 'text-slate-400'}`}>Font</span>
-                           <select value={props.fontFamily} onChange={(e) => props.setFontFamily(e.target.value)} className={`bg-white/5 p-2 rounded-xl text-[10px] font-bold ${isDark ? 'text-white/70' : 'text-slate-700'} outline-none border border-white/10 cursor-pointer`}>
-                             {fonts.map(f => <option key={f.id} value={f.id} className={isDark ? "bg-slate-900 text-white" : "bg-white text-slate-800"}>{f.name}</option>)}
-                           </select>
-                        </div>
-                      </>
-                    )}
-
-                    {(t.id === "rectangle" || t.id === "circle" || t.id === "sticky") && (
-                      <>
-                        <div className={`h-[1px] w-full ${borderClass}`} />
-                        <div className="flex items-center justify-between gap-2">
-                          <span className={`text-[10px] font-black uppercase tracking-widest ${isDark ? 'text-white/30' : 'text-slate-400'}`}>Fill Color</span>
-                          <div className="relative w-8 h-8 rounded-full border border-black/10 overflow-hidden shadow-inner" style={{ backgroundColor: props.fillColor || "transparent" }}>
-                            {!props.fillColor && <div className="absolute inset-0 bg-white/20 -rotate-45" />}
-                            <input type="color" value={props.fillColor || "#ffffff"} onChange={(e) => props.setFillColor(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
-                          </div>
-                        </div>
-                        <div className="flex flex-col gap-1.5 mt-1">
-                           <span className={`text-[10px] font-black uppercase tracking-widest ${isDark ? 'text-white/30' : 'text-slate-400'}`}>Fill Style</span>
-                           <select value={props.fillStyle} onChange={(e) => props.setFillStyle(e.target.value as FillStyle)} className={`bg-white/5 p-2 rounded-xl text-[10px] font-bold ${isDark ? 'text-white/70' : 'text-slate-700'} outline-none border border-white/10 cursor-pointer`}>
-                              <option value="hachure">Hachure</option>
-                              <option value="solid">Solid</option>
-                              <option value="zigzag">Zigzag</option>
-                              <option value="cross-hatch">Cross-hatch</option>
-                              <option value="dots">Dots</option>
-                           </select>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  {/* Arrow for the popover */}
-                  <div className={`absolute bottom-full left-1/2 -translate-x-1/2 w-3 h-3 rotate-45 border-t border-l border-white/10 -mb-[6px]`} style={{ backgroundColor: isDark ? '#0a0e1a' : '#ffffff' }} />
-                </div>
-              )}
             </div>
           ))}
         </div>
+
+        {/* Property Popover — rendered OUTSIDE the overflow-hidden scroll container */}
+        {mainTools.map((t) =>
+          props.selectedTool === t.id && t.id !== "none" && t.id !== "select" && t.id !== "comment" && t.id !== "laser" && (
+            <div key={`popover-${t.id}`} className="absolute top-full left-1/2 -translate-x-1/2 pt-3 z-[100] animate-zoom-in">
+              <div className={`flex flex-col gap-3 p-4 ${glassClass} rounded-2xl shadow-2xl min-w-[200px] border border-white/10`}>
+                <div className="flex items-center justify-between gap-4">
+                  <span className={`text-[10px] font-black uppercase tracking-widest ${isDark ? 'text-white/30' : 'text-slate-400'}`}>
+                    {t.id === "eraser" ? "Size" : "Stroke"}
+                  </span>
+                  <div className="flex bg-black/5 rounded-lg p-0.5">
+                    {[
+                      { val: t.id === "eraser" ? 10 : 1, label: "T" },
+                      { val: t.id === "eraser" ? 20 : 3, label: "M" },
+                      { val: t.id === "eraser" ? 40 : 6, label: "B" }
+                    ].map((s) => (
+                      <button
+                        key={s.val}
+                        onClick={() => {
+                          if (t.id === "eraser") props.setEraserSize(s.val);
+                          else props.setStrokeWidth(s.val);
+                        }}
+                        className={`w-8 h-8 flex items-center justify-center rounded-md text-[10px] font-bold transition-all ${
+                          (t.id === "eraser" ? props.eraserSize === s.val : props.strokeWidth === s.val)
+                            ? "bg-white shadow-sm text-blue-600"
+                            : `${textClass} hover:bg-white/10`
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {t.id !== "eraser" && (
+                  <div className="flex items-center justify-between gap-4">
+                    <span className={`text-[10px] font-black uppercase tracking-widest ${isDark ? 'text-white/30' : 'text-slate-400'}`}>Opacity</span>
+                    <div className="flex items-center gap-2">
+                      <input 
+                        type="range" min="0.1" max="1" step="0.1" 
+                        value={props.opacity} 
+                        onChange={(e) => props.setOpacity(parseFloat(e.target.value))}
+                        className="w-20 h-1.5 rounded-full accent-blue-600 cursor-pointer"
+                      />
+                      <span className={`text-[10px] font-bold tabular-nums w-7 text-right ${isDark ? 'text-white/50' : 'text-slate-500'}`}>{Math.round(props.opacity * 100)}%</span>
+                    </div>
+                  </div>
+                )}
+
+                {t.id === "text" && (
+                  <>
+                    <div className={`h-[1px] w-full ${borderClass}`} />
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`text-[10px] font-black uppercase tracking-widest ${isDark ? 'text-white/30' : 'text-slate-400'}`}>Style</span>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => props.setBold(!props.bold)} className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all ${props.bold ? "bg-blue-600 text-white" : `hover:bg-black/5 ${textClass}`}`}><BoldIcon /></button>
+                        <button onClick={() => props.setItalic(!props.italic)} className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all ${props.italic ? "bg-blue-600 text-white" : `hover:bg-black/5 ${textClass}`}`}><ItalicIcon /></button>
+                        <button onClick={() => props.setUnderline(!props.underline)} className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all ${props.underline ? "bg-blue-600 text-white" : `hover:bg-black/5 ${textClass}`}`}><UnderlineIcon /></button>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1.5 mt-1">
+                       <span className={`text-[10px] font-black uppercase tracking-widest ${isDark ? 'text-white/30' : 'text-slate-400'}`}>Font</span>
+                       <select value={props.fontFamily} onChange={(e) => props.setFontFamily(e.target.value)} className={`bg-white/5 p-2 rounded-xl text-[10px] font-bold ${isDark ? 'text-white/70' : 'text-slate-700'} outline-none border border-white/10 cursor-pointer`}>
+                         {fonts.map(f => <option key={f.id} value={f.id} className={isDark ? "bg-slate-900 text-white" : "bg-white text-slate-800"}>{f.name}</option>)}
+                       </select>
+                    </div>
+                  </>
+                )}
+
+                {(t.id === "rectangle" || t.id === "circle" || t.id === "sticky") && (
+                  <>
+                    <div className={`h-[1px] w-full ${borderClass}`} />
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`text-[10px] font-black uppercase tracking-widest ${isDark ? 'text-white/30' : 'text-slate-400'}`}>Fill Color</span>
+                      <div className="relative w-8 h-8 rounded-full border border-black/10 overflow-hidden shadow-inner" style={{ backgroundColor: props.fillColor || "transparent" }}>
+                        {!props.fillColor && <div className="absolute inset-0 bg-white/20 -rotate-45" />}
+                        <input type="color" value={props.fillColor || "#ffffff"} onChange={(e) => props.setFillColor(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1.5 mt-1">
+                       <span className={`text-[10px] font-black uppercase tracking-widest ${isDark ? 'text-white/30' : 'text-slate-400'}`}>Fill Style</span>
+                       <select value={props.fillStyle} onChange={(e) => props.setFillStyle(e.target.value as FillStyle)} className={`bg-white/5 p-2 rounded-xl text-[10px] font-bold ${isDark ? 'text-white/70' : 'text-slate-700'} outline-none border border-white/10 cursor-pointer`}>
+                          <option value="hachure">Hachure</option>
+                          <option value="solid">Solid</option>
+                          <option value="zigzag">Zigzag</option>
+                          <option value="cross-hatch">Cross-hatch</option>
+                          <option value="dots">Dots</option>
+                       </select>
+                    </div>
+                  </>
+                )}
+              </div>
+              {/* Arrow pointing up into the toolbar */}
+              <div className={`absolute top-[6px] left-1/2 -translate-x-1/2 w-3 h-3 rotate-45 border-t border-l border-white/10`} style={{ backgroundColor: isDark ? '#0a0e1a' : '#ffffff' }} />
+            </div>
+          )
+        )}
 
         <div className={`w-[1px] h-6 ${borderClass} flex-shrink-0`} />
 
@@ -315,7 +320,7 @@ export default function Toolbar(props: ToolbarProps) {
           </button>
           
           {showExportOptions && (
-            <div className={`absolute top-12 right-0 w-40 p-2 rounded-2xl shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200 z-[100] ${isDark ? 'bg-slate-900/95 backdrop-blur-xl border border-white/10' : 'bg-white border border-slate-200'}`}>
+            <div className={`absolute top-12 right-0 w-40 p-2 rounded-2xl shadow-2xl animate-zoom-in z-[100] ${isDark ? 'bg-slate-900/95 backdrop-blur-xl border border-white/10' : 'bg-white border border-slate-200'}`}>
               <button 
                 onClick={() => { props.onExportPNG(); setShowExportOptions(false); }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${isDark ? 'text-white/70 hover:bg-white/5 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
